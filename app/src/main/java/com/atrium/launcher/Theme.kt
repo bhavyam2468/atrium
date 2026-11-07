@@ -36,12 +36,12 @@ internal object Fonts {
     const val SERIF = 5
 
     val specs = listOf(
-        FontSpec("System", null, Typeface.SANS_SERIF),
+        FontSpec("System", null, "sans-serif"),
         FontSpec("Inter", R.font.inter_variable, null),
         FontSpec("Space Grotesk", R.font.space_grotesk_variable, null),
         FontSpec("Fraunces", R.font.fraunces_variable, null),
         FontSpec("JetBrains Mono", R.font.jetbrains_mono_variable, null),
-        FontSpec("Serif", null, Typeface.SERIF),
+        FontSpec("Serif", null, "serif"),
     )
 
     private val baseCache = HashMap<Int, Typeface>()
@@ -205,7 +205,7 @@ internal fun patternExample(pattern: String): String =
 
 /* ------------------------------ presets --------------------------------- */
 
-internal class Preset(val name: String, val values: Map<String, Any>)
+class Preset(val name: String, val values: Map<String, Any>)
 
 internal val PRESETS = listOf(
     Preset("Atrium", mapOf(
@@ -267,7 +267,7 @@ internal val PRESETS = listOf(
 
 /* ------------------------------- theme ---------------------------------- */
 
-internal class AtriumTheme(private val ctx: Context) {
+class AtriumTheme(private val ctx: Context) {
 
     private val prefs: SharedPreferences =
         ctx.getSharedPreferences("atrium_theme", Context.MODE_PRIVATE)

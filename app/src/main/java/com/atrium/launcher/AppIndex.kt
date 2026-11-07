@@ -90,7 +90,7 @@ class AppIndex(private val activity: Activity) {
     }
 
     /** Render (or fetch cached) icon for an entry and hand it to the view on the main thread. */
-    fun bindIcon(view: IconView, e: AppEntry) {
+    internal fun bindIcon(view: IconView, e: AppEntry) {
         e.icon?.let {
             view.icon = it
             return

@@ -48,11 +48,13 @@ class LauncherActivity : Activity() {
 
         settings.applyInitial()
 
-        window.insetsController?.setSystemBarsAppearance(
-            0,
-            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-                WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-        )
+        try {
+            window.insetsController?.setSystemBarsAppearance(
+                0,
+                WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            )
+        } catch (_: Exception) {}
 
         index.onChanged = { root.refresh() }
         index.onLaunch = { root.blurOut() }

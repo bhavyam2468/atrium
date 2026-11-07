@@ -48,9 +48,9 @@ internal class DesignSheet(
     private val onDone: () -> Unit
 ) : FrameLayout(ctx) {
 
-    private enum class Z { TIME, DATE, PINS, GAP, ROW, ROWGAP, BAR, EDGE_L, EDGE_R, BG }
+    private enum class Zone { TIME, DATE, PINS, GAP, ROW, ROWGAP, BAR, EDGE_L, EDGE_R, BG }
 
-    private class Hit(val z: Z, val v: View? = null, val y: Float = 0f)
+    private class Hit(val z: Zone, val v: View? = null, val y: Float = 0f)
 
     private fun dp(v: Float) = context.dp(v)
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
@@ -108,7 +108,7 @@ internal class DesignSheet(
 
     /* ----------------------------- gestures ----------------------------- */
 
-    private var gZone: Z? = null
+    private var gZone: Zone? = null
     private var gMode = 0 // 0 idle · 1 drag · 2 two-finger · 3 swallowed
     private var downX = 0f
     private var downY = 0f
@@ -494,7 +494,7 @@ internal class DesignSheet(
         val host = rHomeHost ?: return
         if (card.height == 0 || host.height == 0) return
         val avail = (card.height - card.paddingTop - card.paddingBottom - host.height)
-            .coerceAtLeast(0f)
+            .coerceAtLeast(0)
         host.translationY = avail * theme.anchor_y
     }
 
@@ -530,19 +530,19 @@ internal class DesignSheet(
 
     private fun zoneAt(x: Float, y: Float): Hit {
         if (mode == 0) {
-            if (inView(rTime, x, y, dp(6f))) return Hit(Z.TIME, rTime)
-            if (inView(rDate, x, y, dp(6f))) return Hit(Z.DATE, rDate)
-            if (theme.pins_visible && inView(rPins, x, y, dp(5f))) return Hit(Z.PINS, rPins)
+            if (inView(rTime, x, y, dp(6f))) return Hit(Zone.TIME, rTime)
+            if (inView(rDate, x, y, dp(6f))) return Hit(Zone.DATE, rDate)
+            if (theme.pins_visible && inView(rPins, x, y, dp(5f))) return Hit(Zone.PINS, rPins)
             if (rClock != null && rPins != null && theme.pins_visible) {
                 val c = offsetInto(rClock!!)
                 val p = offsetInto(rPins!!)
                 val mid = (c.second + rClock!!.height + p.second) / 2f
                 if (abs(y - mid) < dp(14f) && x > card.width * 0.2f && x < card.width * 0.8f)
-                    return Hit(Z.GAP, y = mid)
+                    return Hit(Zone.GAP, y = mid)
             }
         } else {
             for (row in rRows) {
-                if (inView(row, x, y, dp(4f))) return Hit(Z.ROW, row)
+                if (inView(row, x, y, dp(4f))) return Hit(Zone.ROW, row)
             }
             for (i in 0 until rRows.size - 1) {
                 val a = rRows[i]
@@ -550,19 +550,19 @@ internal class DesignSheet(
                 val ao = offsetInto(a)
                 val bo = offsetInto(b)
                 val mid = (ao.second + a.height + bo.second) / 2f
-                if (abs(y - mid) < dp(12f)) return Hit(Z.ROWGAP, y = mid)
+                if (abs(y - mid) < dp(12f)) return Hit(Zone.ROWGAP, y = mid)
             }
-            if (inView(rBarHost, x, y, dp(6f))) return Hit(Z.BAR, rBarHost)
+            if (inView(rBarHost, x, y, dp(6f))) return Hit(Zone.BAR, rBarHost)
         }
-        if (x < dp(26f)) return Hit(Z.EDGE_L)
-        if (x > card.width - dp(26f)) return Hit(Z.EDGE_R)
-        return Hit(Z.BG)
+        if (x < dp(26f)) return Hit(Zone.EDGE_L)
+        if (x > card.width - dp(26f)) return Hit(Zone.EDGE_R)
+        return Hit(Zone.BG)
     }
 
     private fun zoneRect(hit: Hit, out: RectF): Int {
         val v = hit.v
         when (hit.z) {
-            Z.TIME, Z.DATE, Z.PINS, Z.ROW, Z.BAR -> {
+            Zone.TIME, Zone.DATE, Zone.PINS, Zone.ROW, Zone.BAR -> {
                 if (v != null) {
                     val (x, y) = offsetInto(v)
                     val pad = dp(8f)
@@ -570,7 +570,7 @@ internal class DesignSheet(
                     return 0
                 }
             }
-            Z.GAP -> {
+            Zone.GAP -> {
                 if (rClock != null && rPins != null) {
                     val c = offsetInto(rClock!!)
                     val p = offsetInto(rPins!!)
@@ -580,22 +580,22 @@ internal class DesignSheet(
                     return 2
                 }
             }
-            Z.ROWGAP -> {
+            Zone.ROWGAP -> {
                 val inset = card.width * 0.28f
                 out.set(inset, hit.y - dp(2f), card.width - inset, hit.y + dp(2f))
                 return 2
             }
-            Z.EDGE_L -> {
+            Zone.EDGE_L -> {
                 val x = card.paddingLeft.toFloat()
                 out.set(x - dp(2f), card.height * 0.22f, x + dp(2f), card.height * 0.78f)
                 return 1
             }
-            Z.EDGE_R -> {
+            Zone.EDGE_R -> {
                 val x = card.width - card.paddingRight.toFloat()
                 out.set(x - dp(2f), card.height * 0.22f, x + dp(2f), card.height * 0.78f)
                 return 1
             }
-            Z.BG -> {
+            Zone.BG -> {
                 out.set(dp(8f), dp(8f), card.width - dp(8f), card.height - dp(8f))
                 return 0
             }
@@ -711,34 +711,34 @@ internal class DesignSheet(
     private fun avgX(e: MotionEvent): Float = (e.getX(0) + e.getX(1)) / 2f
     private fun avgY(e: MotionEvent): Float = (e.getY(0) + e.getY(1)) / 2f
 
-    private fun zoneDraggable(z: Z?): Boolean = when (z) {
-        Z.TIME, Z.DATE, Z.PINS, Z.GAP, Z.EDGE_L, Z.EDGE_R, Z.ROWGAP, Z.BG -> true
+    private fun zoneDraggable(z: Zone?): Boolean = when (z) {
+        Zone.TIME, Zone.DATE, Zone.PINS, Zone.GAP, Zone.EDGE_L, Zone.EDGE_R, Zone.ROWGAP, Zone.BG -> true
         else -> false
     }
 
-    private fun zoneKeys(z: Z?): List<String> = when (z) {
-        Z.TIME, Z.DATE -> listOf(Tk.CLOCK_SCALE, Tk.CLOCK_WEIGHT)
-        Z.PINS -> listOf(Tk.PINS_SIZE)
-        Z.ROW -> listOf(Tk.UI_SIZE, Tk.UI_WEIGHT)
-        Z.BAR -> listOf(Tk.SEARCH_SIZE)
-        Z.BG -> listOf(Tk.BRIGHTNESS)
+    private fun zoneKeys(z: Zone?): List<String> = when (z) {
+        Zone.TIME, Zone.DATE -> listOf(Tk.CLOCK_SCALE, Tk.CLOCK_WEIGHT)
+        Zone.PINS -> listOf(Tk.PINS_SIZE)
+        Zone.ROW -> listOf(Tk.UI_SIZE, Tk.UI_WEIGHT)
+        Zone.BAR -> listOf(Tk.SEARCH_SIZE)
+        Zone.BG -> listOf(Tk.BRIGHTNESS)
         else -> emptyList()
     }
 
     private fun beginDrag() {
         when (gZone) {
-            Z.TIME, Z.DATE -> {
+            Zone.TIME, Zone.DATE -> {
                 rHomeHost?.let { moveBaseTy = it.translationY }
                 moveBaseTx = 0f
                 lastSnapX = -1
                 lastSnapY = -1
                 guides.on = true
             }
-            Z.PINS -> pinsBaseTx = rPins?.translationX ?: 0f
-            Z.GAP -> dragBase = theme.clock_gap
-            Z.EDGE_L, Z.EDGE_R -> dragBase = theme.side_inset
-            Z.ROWGAP -> dragBase = theme.row_density
-            Z.BG -> {
+            Zone.PINS -> pinsBaseTx = rPins?.translationX ?: 0f
+            Zone.GAP -> dragBase = theme.clock_gap
+            Zone.EDGE_L, Zone.EDGE_R -> dragBase = theme.side_inset
+            Zone.ROWGAP -> dragBase = theme.row_density
+            Zone.BG -> {
                 dragBase = theme.wallpaper_dim
                 bgWasBlack = theme.background_mode == 0
             }
@@ -755,13 +755,13 @@ internal class DesignSheet(
 
     private fun applyDrag(dx: Float, dy: Float) {
         when (gZone) {
-            Z.TIME, Z.DATE -> moveClock(dx, dy)
-            Z.PINS -> movePins(dx)
-            Z.GAP -> setTk(Tk.CLOCK_GAP, dragBase + dy)
-            Z.EDGE_L -> setTk(Tk.SIDE_INSET, dragBase - dx)
-            Z.EDGE_R -> setTk(Tk.SIDE_INSET, dragBase + dx)
-            Z.ROWGAP -> setTk(Tk.ROW_DENSITY, dragBase + dy / dp(64f))
-            Z.BG -> applyBgDrag(dy)
+            Zone.TIME, Zone.DATE -> moveClock(dx, dy)
+            Zone.PINS -> movePins(dx)
+            Zone.GAP -> setTk(Tk.CLOCK_GAP, dragBase + dy)
+            Zone.EDGE_L -> setTk(Tk.SIDE_INSET, dragBase - dx)
+            Zone.EDGE_R -> setTk(Tk.SIDE_INSET, dragBase + dx)
+            Zone.ROWGAP -> setTk(Tk.ROW_DENSITY, dragBase + dy / dp(64f))
+            Zone.BG -> applyBgDrag(dy)
             else -> {}
         }
     }
@@ -781,25 +781,25 @@ internal class DesignSheet(
 
     private fun applyTwoFinger(dx: Float, dy: Float) {
         when (gZone) {
-            Z.TIME, Z.DATE -> {
+            Zone.TIME, Zone.DATE -> {
                 setTk(Tk.CLOCK_SCALE, twoVal(Tk.CLOCK_SCALE) - dy / dp(80f))
                 setTk(Tk.CLOCK_WEIGHT, twoVal(Tk.CLOCK_WEIGHT) + dx / 3f)
             }
-            Z.PINS -> setTk(Tk.PINS_SIZE, twoVal(Tk.PINS_SIZE) - dy / dp(90f))
-            Z.ROW -> {
+            Zone.PINS -> setTk(Tk.PINS_SIZE, twoVal(Tk.PINS_SIZE) - dy / dp(90f))
+            Zone.ROW -> {
                 setTk(Tk.UI_SIZE, twoVal(Tk.UI_SIZE) - dy / dp(60f))
                 setTk(Tk.UI_WEIGHT, twoVal(Tk.UI_WEIGHT) + dx / 3f)
             }
-            Z.BAR -> setTk(Tk.SEARCH_SIZE, twoVal(Tk.SEARCH_SIZE) - dy / dp(60f))
-            Z.BG -> setTk(Tk.BRIGHTNESS, twoVal(Tk.BRIGHTNESS) - dy / (card.height * 1.4f))
+            Zone.BAR -> setTk(Tk.SEARCH_SIZE, twoVal(Tk.SEARCH_SIZE) - dy / dp(60f))
+            Zone.BG -> setTk(Tk.BRIGHTNESS, twoVal(Tk.BRIGHTNESS) - dy / (card.height * 1.4f))
             else -> {}
         }
     }
 
     private fun endDrag() {
         when (gZone) {
-            Z.TIME, Z.DATE -> endClockMove()
-            Z.PINS -> endPinsMove()
+            Zone.TIME, Zone.DATE -> endClockMove()
+            Zone.PINS -> endPinsMove()
             else -> {}
         }
         guides.on = false
@@ -811,7 +811,7 @@ internal class DesignSheet(
     private fun moveClock(dx: Float, dy: Float) {
         val host = rHomeHost ?: return
         if (card.height == 0 || host.height == 0) return
-        val avail = (card.height - card.paddingTop - card.paddingBottom - host.height)
+        val avail = (card.height - card.paddingTop - card.paddingBottom - host.height).toFloat()
             .coerceAtLeast(1f)
         var tx = moveBaseTx + dx
         var ty = (moveBaseTy + dy).coerceIn(0f, avail)
@@ -851,7 +851,7 @@ internal class DesignSheet(
             positionReplicaHome()
             return
         }
-        val avail = (card.height - card.paddingTop - card.paddingBottom - host.height)
+        val avail = (card.height - card.paddingTop - card.paddingBottom - host.height).toFloat()
             .coerceAtLeast(1f)
         val cx = card.width / 2f + host.translationX
         val alignX = when {
@@ -875,7 +875,7 @@ internal class DesignSheet(
         val host = rHomeHost
         if (host != null && host.width > 0) {
             chipZone.text = "Pins"
-            chipValue.text = alignStringFrom(host.width / 2f + pins.translationX, host.width)
+            chipValue.text = alignStringFrom(host.width / 2f + pins.translationX, host.width.toFloat())
         }
         showHighlightFor(lastHit, fast = true)
     }
@@ -896,20 +896,20 @@ internal class DesignSheet(
 
     /* ------------------------------ taps -------------------------------- */
 
-    private fun zoneTap(z: Z?) {
+    private fun zoneTap(z: Zone?) {
         val acted = when (z) {
-            Z.TIME -> {
+            Zone.TIME -> {
                 theme.set(Tk.TIME_FORMAT, (theme.time_format + 1) % TIME_FORMATS.size)
                 true
             }
-            Z.DATE -> {
+            Zone.DATE -> {
                 theme.set(Tk.DATE_FORMAT, (theme.date_format + 1) % DATE_FORMATS.size)
                 true
             }
-            Z.PINS -> { cyclePins(); true }
-            Z.ROW -> { theme.set(Tk.ROW_STYLE, (theme.row_style + 1) % 3); true }
-            Z.BAR -> { theme.set(Tk.SEARCH_STYLE, (theme.search_style + 1) % 3); true }
-            Z.BG -> { theme.set(Tk.BACKGROUND, 1 - theme.background_mode); true }
+            Zone.PINS -> { cyclePins(); true }
+            Zone.ROW -> { theme.set(Tk.ROW_STYLE, (theme.row_style + 1) % 3); true }
+            Zone.BAR -> { theme.set(Tk.SEARCH_STYLE, (theme.search_style + 1) % 3); true }
+            Zone.BG -> { theme.set(Tk.BACKGROUND, 1 - theme.background_mode); true }
             else -> false
         }
         if (acted) pane.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
@@ -927,17 +927,17 @@ internal class DesignSheet(
         }
     }
 
-    private fun zoneDoubleTap(z: Z?) {
+    private fun zoneDoubleTap(z: Zone?) {
         val keys = when (z) {
-            Z.TIME -> listOf(Tk.TIME_FORMAT, Tk.CLOCK_FAMILY, Tk.CLOCK_SCALE, Tk.CLOCK_WEIGHT, Tk.CLOCK_TRACKING)
-            Z.DATE -> listOf(Tk.DATE_FORMAT, Tk.DATE_SCALE, Tk.DATE_WEIGHT, Tk.DATE_TRACKING, Tk.DATE_UPPER, Tk.ARRANGEMENT, Tk.SEPARATOR)
-            Z.PINS -> listOf(Tk.PINS_VISIBLE, Tk.PINS_SIZE, Tk.PINS_ALIGN)
-            Z.GAP -> listOf(Tk.CLOCK_GAP, Tk.ANCHOR_Y, Tk.ALIGN_X)
-            Z.ROW -> listOf(Tk.ROW_STYLE, Tk.UI_SIZE, Tk.UI_WEIGHT, Tk.ICON_SIZE, Tk.ICON_SHAPE, Tk.ICON_MONO, Tk.ROW_DENSITY, Tk.RESULT_ALIGN, Tk.SHOW_SUBTITLES)
-            Z.ROWGAP -> listOf(Tk.ROW_DENSITY)
-            Z.BAR -> listOf(Tk.SEARCH_STYLE, Tk.SEARCH_SIZE)
-            Z.EDGE_L, Z.EDGE_R -> listOf(Tk.SIDE_INSET, Tk.COLUMN_WIDTH)
-            Z.BG -> listOf(Tk.BACKGROUND, Tk.WALLPAPER_DIM, Tk.BRIGHTNESS, Tk.ACCENT, Tk.TINT_TEXT)
+            Zone.TIME -> listOf(Tk.TIME_FORMAT, Tk.CLOCK_FAMILY, Tk.CLOCK_SCALE, Tk.CLOCK_WEIGHT, Tk.CLOCK_TRACKING)
+            Zone.DATE -> listOf(Tk.DATE_FORMAT, Tk.DATE_SCALE, Tk.DATE_WEIGHT, Tk.DATE_TRACKING, Tk.DATE_UPPER, Tk.ARRANGEMENT, Tk.SEPARATOR)
+            Zone.PINS -> listOf(Tk.PINS_VISIBLE, Tk.PINS_SIZE, Tk.PINS_ALIGN)
+            Zone.GAP -> listOf(Tk.CLOCK_GAP, Tk.ANCHOR_Y, Tk.ALIGN_X)
+            Zone.ROW -> listOf(Tk.ROW_STYLE, Tk.UI_SIZE, Tk.UI_WEIGHT, Tk.ICON_SIZE, Tk.ICON_SHAPE, Tk.ICON_MONO, Tk.ROW_DENSITY, Tk.RESULT_ALIGN, Tk.SHOW_SUBTITLES)
+            Zone.ROWGAP -> listOf(Tk.ROW_DENSITY)
+            Zone.BAR -> listOf(Tk.SEARCH_STYLE, Tk.SEARCH_SIZE)
+            Zone.EDGE_L, Zone.EDGE_R -> listOf(Tk.SIDE_INSET, Tk.COLUMN_WIDTH)
+            Zone.BG -> listOf(Tk.BACKGROUND, Tk.WALLPAPER_DIM, Tk.BRIGHTNESS, Tk.ACCENT, Tk.TINT_TEXT)
             else -> emptyList()
         }
         if (keys.isEmpty()) return
@@ -948,17 +948,17 @@ internal class DesignSheet(
         announce("Reset", "back to defaults")
     }
 
-    private fun zoneLongPress(z: Z) {
+    private fun zoneLongPress(z: Zone) {
         val keys = when (z) {
-            Z.TIME -> listOf(Tk.TIME_FORMAT, Tk.CLOCK_FAMILY, Tk.CLOCK_SCALE, Tk.CLOCK_WEIGHT, Tk.CLOCK_TRACKING, Tk.ARRANGEMENT, Tk.SEPARATOR)
-            Z.DATE -> listOf(Tk.DATE_FORMAT, Tk.DATE_SCALE, Tk.DATE_WEIGHT, Tk.DATE_TRACKING, Tk.DATE_UPPER, Tk.ARRANGEMENT, Tk.SEPARATOR)
-            Z.PINS -> listOf(Tk.PINS_VISIBLE, Tk.PINS_SIZE, Tk.PINS_ALIGN)
-            Z.GAP -> listOf(Tk.CLOCK_GAP, Tk.ALIGN_X, Tk.ANCHOR_Y, Tk.SIDE_INSET)
-            Z.ROW -> listOf(Tk.ROW_STYLE, Tk.UI_SIZE, Tk.UI_WEIGHT, Tk.TRACKING, Tk.ICON_SIZE, Tk.ICON_SHAPE, Tk.ICON_MONO, Tk.ROW_DENSITY, Tk.RESULT_ALIGN, Tk.SHOW_SUBTITLES, Tk.SHOW_HEADERS, Tk.COLUMN_WIDTH)
-            Z.ROWGAP -> listOf(Tk.ROW_DENSITY)
-            Z.BAR -> listOf(Tk.SEARCH_STYLE, Tk.SEARCH_SIZE)
-            Z.EDGE_L, Z.EDGE_R -> listOf(Tk.SIDE_INSET, Tk.COLUMN_WIDTH)
-            Z.BG -> listOf(Tk.BACKGROUND, Tk.WALLPAPER_DIM, Tk.BRIGHTNESS, Tk.ACCENT, Tk.TINT_TEXT)
+            Zone.TIME -> listOf(Tk.TIME_FORMAT, Tk.CLOCK_FAMILY, Tk.CLOCK_SCALE, Tk.CLOCK_WEIGHT, Tk.CLOCK_TRACKING, Tk.ARRANGEMENT, Tk.SEPARATOR)
+            Zone.DATE -> listOf(Tk.DATE_FORMAT, Tk.DATE_SCALE, Tk.DATE_WEIGHT, Tk.DATE_TRACKING, Tk.DATE_UPPER, Tk.ARRANGEMENT, Tk.SEPARATOR)
+            Zone.PINS -> listOf(Tk.PINS_VISIBLE, Tk.PINS_SIZE, Tk.PINS_ALIGN)
+            Zone.GAP -> listOf(Tk.CLOCK_GAP, Tk.ALIGN_X, Tk.ANCHOR_Y, Tk.SIDE_INSET)
+            Zone.ROW -> listOf(Tk.ROW_STYLE, Tk.UI_SIZE, Tk.UI_WEIGHT, Tk.TRACKING, Tk.ICON_SIZE, Tk.ICON_SHAPE, Tk.ICON_MONO, Tk.ROW_DENSITY, Tk.RESULT_ALIGN, Tk.SHOW_SUBTITLES, Tk.SHOW_HEADERS, Tk.COLUMN_WIDTH)
+            Zone.ROWGAP -> listOf(Tk.ROW_DENSITY)
+            Zone.BAR -> listOf(Tk.SEARCH_STYLE, Tk.SEARCH_SIZE)
+            Zone.EDGE_L, Zone.EDGE_R -> listOf(Tk.SIDE_INSET, Tk.COLUMN_WIDTH)
+            Zone.BG -> listOf(Tk.BACKGROUND, Tk.WALLPAPER_DIM, Tk.BRIGHTNESS, Tk.ACCENT, Tk.TINT_TEXT)
         }
         openNodeSheet(sheetTitle(z), keys)
         pane.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -970,15 +970,15 @@ internal class DesignSheet(
         OptionSheet(context, this, theme).showNodes(title, nodes)
     }
 
-    private fun sheetTitle(z: Z): String = when (z) {
-        Z.TIME -> "Clock"
-        Z.DATE -> "Date"
-        Z.PINS -> "Pins"
-        Z.GAP -> "Layout"
-        Z.ROW, Z.ROWGAP -> "Rows"
-        Z.BAR -> "Search bar"
-        Z.EDGE_L, Z.EDGE_R -> "Layout"
-        Z.BG -> "Colour & background"
+    private fun sheetTitle(z: Zone): String = when (z) {
+        Zone.TIME -> "Clock"
+        Zone.DATE -> "Date"
+        Zone.PINS -> "Pins"
+        Zone.GAP -> "Layout"
+        Zone.ROW, Zone.ROWGAP -> "Rows"
+        Zone.BAR -> "Search bar"
+        Zone.EDGE_L, Zone.EDGE_R -> "Layout"
+        Zone.BG -> "Colour & background"
     }
 
     /* ------------------------------ chip -------------------------------- */
@@ -995,16 +995,16 @@ internal class DesignSheet(
         else -> "Bare"
     }
 
-    private fun chipFor(z: Z?): Triple<String, String, String> = when (z) {
-        Z.TIME -> Triple("Time", patternExample(theme.timePattern), "tap format · drag move · two fingers size & weight · hold everything")
-        Z.DATE -> Triple("Date", if (theme.date_format == DATE_HIDDEN) "Hidden" else patternExample(theme.datePattern), "tap format · drag move · two fingers size & weight · hold everything")
-        Z.PINS -> Triple("Pins", if (!theme.pins_visible) "Hidden" else fmtX(theme.pins_size), "tap size · drag align · two fingers size · hold everything")
-        Z.GAP -> Triple("Gap", fmtDp(theme.clock_gap), "drag to open or close the gap")
-        Z.ROW -> Triple("Rows", rowStyleName(), "tap style · two fingers size & weight · hold everything")
-        Z.ROWGAP -> Triple("Row spacing", fmtX(theme.row_density), "drag to let rows breathe")
-        Z.BAR -> Triple("Search bar", barStyleName(), "tap style · two fingers size")
-        Z.EDGE_L, Z.EDGE_R -> Triple("Inset", fmtDp(theme.side_inset), "drag to pull content away from the edge")
-        Z.BG -> Triple("Background", if (theme.background_mode == 0) "Pure black" else "Wallpaper · ${fmtPct(theme.wallpaper_dim)} dim", "tap mode · drag dim · two fingers brightness · hold everything")
+    private fun chipFor(z: Zone?): Triple<String, String, String> = when (z) {
+        Zone.TIME -> Triple("Time", patternExample(theme.timePattern), "tap format · drag move · two fingers size & weight · hold everything")
+        Zone.DATE -> Triple("Date", if (theme.date_format == DATE_HIDDEN) "Hidden" else patternExample(theme.datePattern), "tap format · drag move · two fingers size & weight · hold everything")
+        Zone.PINS -> Triple("Pins", if (!theme.pins_visible) "Hidden" else fmtX(theme.pins_size), "tap size · drag align · two fingers size · hold everything")
+        Zone.GAP -> Triple("Gap", fmtDp(theme.clock_gap), "drag to open or close the gap")
+        Zone.ROW -> Triple("Rows", rowStyleName(), "tap style · two fingers size & weight · hold everything")
+        Zone.ROWGAP -> Triple("Row spacing", fmtX(theme.row_density), "drag to let rows breathe")
+        Zone.BAR -> Triple("Search bar", barStyleName(), "tap style · two fingers size")
+        Zone.EDGE_L, Zone.EDGE_R -> Triple("Inset", fmtDp(theme.side_inset), "drag to pull content away from the edge")
+        Zone.BG -> Triple("Background", if (theme.background_mode == 0) "Pure black" else "Wallpaper · ${fmtPct(theme.wallpaper_dim)} dim", "tap mode · drag dim · two fingers brightness · hold everything")
         null -> Triple("Atrium studio", PRESETS[presetIdx].name, "touch anything — drag it, tap it, or use two fingers")
     }
 
@@ -1033,7 +1033,7 @@ internal class DesignSheet(
     }
 
     private fun alignStringFrom(cx: Float, w: Float): String = when {
-        w == 0 -> "Center"
+        w == 0f -> "Center"
         cx < w / 3f -> "Start"
         cx > w * 2f / 3f -> "End"
         else -> "Center"

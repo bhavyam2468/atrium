@@ -27,7 +27,7 @@ import java.util.Locale
 internal fun Context.dp(v: Float) = v * resources.displayMetrics.density
 
 /** Bare text. Press feedback is a tiny scale + dim, no background anywhere. */
-internal class Label(ctx: Context) : TextView(ctx) {
+internal open class Label(ctx: Context) : TextView(ctx) {
     override fun setPressed(pressed: Boolean) {
         super.setPressed(pressed)
         animate().alpha(if (pressed) 0.45f else 1f).scaleX(if (pressed) 0.97f else 1f)
@@ -38,7 +38,7 @@ internal class Label(ctx: Context) : TextView(ctx) {
 }
 
 /** A row container that dims exactly like Label when pressed. */
-internal class PressableRow(ctx: Context) : LinearLayout(ctx) {
+internal open class PressableRow(ctx: Context) : LinearLayout(ctx) {
     override fun setPressed(pressed: Boolean) {
         super.setPressed(pressed)
         animate().alpha(if (pressed) 0.45f else 1f).scaleX(if (pressed) 0.985f else 1f)

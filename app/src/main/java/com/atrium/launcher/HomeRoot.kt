@@ -308,7 +308,7 @@ class HomeRoot(
     private fun positionHome() {
         val h = stage.height
         if (h == 0) return
-        val avail = (h - stage.paddingTop - stage.paddingBottom - homeContent.height).coerceAtLeast(0f)
+        val avail = (h - stage.paddingTop - stage.paddingBottom - homeContent.height).coerceAtLeast(0)
         homeBaseY = avail * theme.anchor_y
         applyHomeTransform()
     }

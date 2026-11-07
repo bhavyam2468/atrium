@@ -34,7 +34,9 @@ class LauncherSettings(private val activity: Activity) {
     }
 
     private fun applyStatusBar(hide: Boolean) {
-        val controller = activity.window.insetsController ?: return
+        val window = activity.window ?: return
+        if (window.peekDecorView() == null) return
+        val controller = try { window.insetsController } catch (_: Exception) { null } ?: return
         if (hide) {
             controller.hide(WindowInsets.Type.statusBars())
         } else {

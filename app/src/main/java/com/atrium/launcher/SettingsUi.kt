@@ -322,7 +322,7 @@ internal class OptionSheet(
         }
         panel.addView(titleView, LinearLayout.LayoutParams(-2, -2).apply {
             marginStart = context.dp(20f).toInt()
-            marginBottom = context.dp(4f).toInt()
+            bottomMargin = context.dp(4f).toInt()
         })
         body = VLayer(context)
         panel.addView(body, LinearLayout.LayoutParams(-1, -2))

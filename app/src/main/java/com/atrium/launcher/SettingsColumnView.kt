@@ -91,7 +91,7 @@ class SettingsColumnView(
         if (dirty) { dirty = false; rebuild(slide = 0) }
     }
 
-    private fun rebuild(slide: Int) {
+    private fun rebuild(slide: Int = 0) {
         dirty = false
         rebuildHeader()
         list.removeAllViews()
