@@ -64,7 +64,7 @@ class HomeRoot(
     private fun dp(v: Float) = context.dp(v)
 
     private val stage = Layer(ctx)
-    private val homeContent = FrameLayout(ctx)
+    private val homeContent = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
     private var clockBlock: ViewGroup? = null
     private val pinsRow = LinearLayout(ctx)
 
@@ -179,7 +179,9 @@ class HomeRoot(
     init {
         theme.addListener(themeListener)
 
-        homeContent.addView(pinsRow, FrameLayout.LayoutParams(-1, -2))
+        homeContent.addView(pinsRow, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(theme.clock_gap).toInt()
+        })
         stage.addView(homeContent, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
         addView(stage, LayoutParams(-1, -1))
 
@@ -260,6 +262,13 @@ class HomeRoot(
         restyleLayout()
         applyBackground()
         setProgress(0f)
+
+        isLongClickable = true
+        setOnLongClickListener { if (!open) { openStudio(); true } else false }
+        stage.isLongClickable = true
+        stage.setOnLongClickListener { if (!open) { openStudio(); true } else false }
+        homeContent.isLongClickable = true
+        homeContent.setOnLongClickListener { if (!open) { openStudio(); true } else false }
     }
 
     // ---------- Layout ----------
@@ -277,7 +286,7 @@ class HomeRoot(
             sidePx, bottomInset + dp(12f).toInt()
         )
         search.setPadding(0, topInset + dp(10f).toInt(), 0, bottomInset + dp(14f).toInt())
-        (pinsRow.layoutParams as? FrameLayout.LayoutParams)?.let {
+        (pinsRow.layoutParams as? LinearLayout.LayoutParams)?.let {
             it.topMargin = dp(theme.clock_gap).toInt()
         }
 
@@ -325,7 +334,11 @@ class HomeRoot(
     private fun buildClock() {
         clockBlock?.let { homeContent.removeView(it) }
         val b = HomeComposer.buildClockBlock(context, theme)
-        homeContent.addView(b, 0, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or theme.hGravity()))
+        HomeComposer.restyleClockBlock(b, theme)
+        homeContent.addView(b, 0, LinearLayout.LayoutParams(-2, -2).apply {
+            gravity = theme.hGravity()
+        })
+        b.setOnLongClickListener { openStudio(); true }
         for (i in 0 until b.childCount) {
             b.getChildAt(i).setOnLongClickListener { openStudio(); true }
         }
@@ -334,8 +347,11 @@ class HomeRoot(
     }
 
     private fun restyleLayout() {
-        (clockBlock?.layoutParams as? FrameLayout.LayoutParams)?.let {
-            it.gravity = Gravity.TOP or theme.hGravity()
+        (clockBlock?.layoutParams as? LinearLayout.LayoutParams)?.let {
+            it.gravity = theme.hGravity()
+        }
+        (pinsRow.layoutParams as? LinearLayout.LayoutParams)?.let {
+            it.topMargin = dp(theme.clock_gap).toInt()
         }
         pinsRow.gravity = theme.pinsGravity()
         pinsRow.visibility = if (theme.pins_visible) VISIBLE else GONE
@@ -803,7 +819,7 @@ class HomeRoot(
                 val dx = e.x - downX
                 if (mode == 0) {
                     if (!open) {
-                        if (dy > slop && dy > abs(dx) * 1.2f) {
+                        if (dy > dp(20f) && dy > abs(dx) * 1.3f) {
                             beginV(e)
                         }
                     } else {

@@ -93,7 +93,7 @@ internal class DesignSheet(
     private var mode = 0 // 0 home · 1 search
     private var modeSwitchPending = false
     private var rContent: View? = null
-    private var rHomeHost: FrameLayout? = null
+    private var rHomeHost: LinearLayout? = null
     private var rClock: ViewGroup? = null
     private var rTime: View? = null
     private var rDate: View? = null
@@ -222,8 +222,8 @@ internal class DesignSheet(
         searchBtn = glyph("Search", 13f).apply { setOnClickListener { switchMode(1) } }
         toolbar.addView(searchBtn, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10f).toInt() })
 
-        aaBtn = AaButton(context)
-        theme.styleUi(aaBtn, 18f)
+        aaBtn = AaButton(context).apply { text = "Aa" }
+        theme.styleUi(aaBtn, 16f)
         aaBtn.setPadding(dp(6f).toInt(), dp(4f).toInt(), dp(6f).toInt(), dp(4f).toInt())
         aaBtn.isClickable = true
         wireAaGestures()
@@ -309,18 +309,20 @@ internal class DesignSheet(
 
         if (mode == 0) {
             val contentHost = Layer(context)
-            val host = FrameLayout(context)
+            val host = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
             rHomeHost = host
             val clock = HomeComposer.buildClockBlock(context, theme)
             rClock = clock
             rTime = HomeComposer.findClockChild(clock, HomeComposer.TAG_TIME)
             rDate = HomeComposer.findClockChild(clock, HomeComposer.TAG_DATE)
-            host.addView(clock, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or theme.hGravity()))
+            host.addView(clock, LinearLayout.LayoutParams(-2, -2).apply {
+                gravity = theme.hGravity()
+            })
 
             val pins = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
             rPins = pins
             fillReplicaPins(pins)
-            host.addView(pins, FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply {
+            host.addView(pins, LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(theme.clock_gap).toInt()
             })
             contentHost.addView(host, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
@@ -394,8 +396,8 @@ internal class DesignSheet(
         applyCardLook(sidePx)
 
         rClock?.let { b ->
-            val lp = b.layoutParams as? FrameLayout.LayoutParams
-            if (lp != null) lp.gravity = Gravity.TOP or theme.hGravity()
+            val lp = b.layoutParams as? LinearLayout.LayoutParams
+            if (lp != null) lp.gravity = theme.hGravity()
             HomeComposer.restyleClockBlock(b, theme)
         }
         rPins?.let { pins ->
@@ -403,7 +405,7 @@ internal class DesignSheet(
             for (i in 0 until pins.childCount) {
                 (pins.getChildAt(i) as? Label)?.let { HomeComposer.stylePin(it, theme) }
             }
-            (pins.layoutParams as? FrameLayout.LayoutParams)?.let { it.topMargin = dp(theme.clock_gap).toInt() }
+            (pins.layoutParams as? LinearLayout.LayoutParams)?.let { it.topMargin = dp(theme.clock_gap).toInt() }
             pins.visibility = if (theme.pins_visible) View.VISIBLE else View.GONE
             pins.requestLayout()
         }
@@ -458,7 +460,12 @@ internal class DesignSheet(
             }
             scrimOverlay.setBackgroundColor(Color.TRANSPARENT)
         }
-        card.setPadding(sidePx, dp(26f).toInt(), sidePx, dp(26f).toInt())
+        card.setPadding(0, 0, 0, 0)
+        if (mode == 0) {
+            rContent?.setPadding(sidePx, dp(26f).toInt(), sidePx, dp(26f).toInt())
+        } else {
+            rContent?.setPadding(sidePx, dp(26f).toInt(), sidePx, dp(18f).toInt())
+        }
     }
 
     private fun restyleBar() {
@@ -492,8 +499,9 @@ internal class DesignSheet(
 
     private fun positionReplicaHome() {
         val host = rHomeHost ?: return
+        val content = rContent ?: return
         if (card.height == 0 || host.height == 0) return
-        val avail = (card.height - card.paddingTop - card.paddingBottom - host.height)
+        val avail = (card.height - content.paddingTop - content.paddingBottom - host.height)
             .coerceAtLeast(0)
         host.translationY = avail * theme.anchor_y
     }
@@ -513,8 +521,8 @@ internal class DesignSheet(
         var y = 0f
         var cur: View = v
         while (cur !== card) {
-            x += cur.left - cur.scrollX
-            y += cur.top - cur.scrollY
+            x += cur.left + cur.translationX - cur.scrollX
+            y += cur.top + cur.translationY - cur.scrollY
             val p = cur.parent as? View ?: break
             cur = p
         }
@@ -586,12 +594,12 @@ internal class DesignSheet(
                 return 2
             }
             Zone.EDGE_L -> {
-                val x = card.paddingLeft.toFloat()
+                val x = dp(theme.side_inset)
                 out.set(x - dp(2f), card.height * 0.22f, x + dp(2f), card.height * 0.78f)
                 return 1
             }
             Zone.EDGE_R -> {
-                val x = card.width - card.paddingRight.toFloat()
+                val x = card.width - dp(theme.side_inset)
                 out.set(x - dp(2f), card.height * 0.22f, x + dp(2f), card.height * 0.78f)
                 return 1
             }
@@ -757,9 +765,9 @@ internal class DesignSheet(
         when (gZone) {
             Zone.TIME, Zone.DATE -> moveClock(dx, dy)
             Zone.PINS -> movePins(dx)
-            Zone.GAP -> setTk(Tk.CLOCK_GAP, dragBase + dy)
-            Zone.EDGE_L -> setTk(Tk.SIDE_INSET, dragBase - dx)
-            Zone.EDGE_R -> setTk(Tk.SIDE_INSET, dragBase + dx)
+            Zone.GAP -> setTk(Tk.CLOCK_GAP, dragBase + dy / dp(1f))
+            Zone.EDGE_L -> setTk(Tk.SIDE_INSET, dragBase - dx / dp(1f))
+            Zone.EDGE_R -> setTk(Tk.SIDE_INSET, dragBase + dx / dp(1f))
             Zone.ROWGAP -> setTk(Tk.ROW_DENSITY, dragBase + dy / dp(64f))
             Zone.BG -> applyBgDrag(dy)
             else -> {}
@@ -810,8 +818,10 @@ internal class DesignSheet(
 
     private fun moveClock(dx: Float, dy: Float) {
         val host = rHomeHost ?: return
+        val content = rContent ?: return
         if (card.height == 0 || host.height == 0) return
-        val avail = (card.height - card.paddingTop - card.paddingBottom - host.height).toFloat()
+        val padTop = content.paddingTop.toFloat()
+        val avail = (card.height - content.paddingTop - content.paddingBottom - host.height).toFloat()
             .coerceAtLeast(1f)
         var tx = moveBaseTx + dx
         var ty = (moveBaseTy + dy).coerceIn(0f, avail)
@@ -823,8 +833,8 @@ internal class DesignSheet(
         if (snapX >= 0) tx += (xs[snapX] - cx) * 0.45f
 
         val half = host.height / 2f
-        val ys = floatArrayOf(avail * 0.15f + half, avail * 0.5f + half, avail * 0.85f + half)
-        val cy = ty + half
+        val ys = floatArrayOf(padTop + avail * 0.15f + half, padTop + avail * 0.5f + half, padTop + avail * 0.85f + half)
+        val cy = padTop + ty + half
         var snapY = -1
         for (i in ys.indices) if (abs(cy - ys[i]) < dp(30f)) { snapY = i; break }
         if (snapY >= 0) ty += (ys[snapY] - cy) * 0.45f
@@ -846,12 +856,13 @@ internal class DesignSheet(
 
     private fun endClockMove() {
         val host = rHomeHost ?: return
+        val content = rContent ?: return
         if (card.height == 0 || host.height == 0) {
             host.translationX = 0f
             positionReplicaHome()
             return
         }
-        val avail = (card.height - card.paddingTop - card.paddingBottom - host.height).toFloat()
+        val avail = (card.height - content.paddingTop - content.paddingBottom - host.height).toFloat()
             .coerceAtLeast(1f)
         val cx = card.width / 2f + host.translationX
         val alignX = when {

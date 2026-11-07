@@ -64,6 +64,13 @@ internal class Layer(ctx: Context) : FrameLayout(ctx) {
  */
 internal class ClockText(ctx: Context) : TextView(ctx) {
 
+    init {
+        setSingleLine(true)
+        maxLines = 1
+        ellipsize = null
+        includeFontPadding = false
+    }
+
     var pattern: String = "h:mm"
         set(v) {
             if (field == v) return

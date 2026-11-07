@@ -28,21 +28,23 @@ internal object HomeComposer {
     fun buildClockBlock(ctx: Context, theme: AtriumTheme): ViewGroup {
         val inline = theme.clock_arrangement == 2
         val hasDate = theme.date_format != DATE_HIDDEN
+        val block = VLayer(ctx)
         if (inline || !hasDate) {
             val time = ClockText(ctx).apply { tag = TAG_TIME }
-            return VLayer(ctx).apply { addView(time) }
-        }
-        val time = ClockText(ctx).apply { tag = TAG_TIME }
-        val date = ClockText(ctx).apply { tag = TAG_DATE }
-        val block = VLayer(ctx)
-        val gap = ctx.dp(3f).toInt()
-        if (theme.clock_arrangement == 0) {
             block.addView(time)
-            block.addView(date, LinearLayout.LayoutParams(-2, -2).apply { topMargin = gap })
         } else {
-            block.addView(date)
-            block.addView(time, LinearLayout.LayoutParams(-2, -2).apply { topMargin = gap })
+            val time = ClockText(ctx).apply { tag = TAG_TIME }
+            val date = ClockText(ctx).apply { tag = TAG_DATE }
+            val gap = ctx.dp(3f).toInt()
+            if (theme.clock_arrangement == 0) {
+                block.addView(time)
+                block.addView(date, LinearLayout.LayoutParams(-2, -2).apply { topMargin = gap })
+            } else {
+                block.addView(date)
+                block.addView(time, LinearLayout.LayoutParams(-2, -2).apply { topMargin = gap })
+            }
         }
+        restyleClockBlock(block, theme)
         return block
     }
 

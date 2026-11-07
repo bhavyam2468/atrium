@@ -211,6 +211,7 @@ internal class AdjustRow(
     private val value: Label
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private var downX = 0f
+    private var downY = 0f
     private var startVal = 0f
     private var lastTick = 0f
     private var moved = false
@@ -226,14 +227,17 @@ internal class AdjustRow(
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = e.x
+                    downY = e.y
                     startVal = node.get()
                     lastTick = startVal
                     moved = false
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.x - downX
-                    if (!moved && abs(dx) > slop) {
+                    val dy = e.y - downY
+                    if (!moved && abs(dx) > slop && abs(dx) > abs(dy) * 1.2f) {
                         moved = true
+                        parent?.requestDisallowInterceptTouchEvent(true)
                         theme.deferWrites()
                     }
                     if (moved) {

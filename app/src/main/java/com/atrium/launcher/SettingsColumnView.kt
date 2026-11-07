@@ -31,11 +31,11 @@ class SettingsColumnView(
     private val header = Label(context)
     private val list = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
     }
     private val container = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
     }
 
     init {
@@ -131,6 +131,7 @@ class SettingsColumnView(
             container.translationX = from
             container.alpha = 0f
             container.animate().translationX(0f).alpha(1f).setDuration(220).setInterpolator(ExpoOut).start()
+            post { scrollTo(0, 0) }
         }
     }
 

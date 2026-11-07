@@ -500,6 +500,9 @@ class AtriumTheme(private val ctx: Context) {
         t.letterSpacing = clock_tracking
         t.setTextColor(fg)
         t.includeFontPadding = false
+        t.setSingleLine(true)
+        t.maxLines = 1
+        t.ellipsize = null
     }
 
     fun styleDate(t: TextView) {
@@ -508,6 +511,9 @@ class AtriumTheme(private val ctx: Context) {
         t.letterSpacing = date_tracking
         t.setTextColor(secondary)
         t.includeFontPadding = false
+        t.setSingleLine(true)
+        t.maxLines = 1
+        t.ellipsize = null
     }
 
     fun styleUi(t: TextView, sp: Float) {
