@@ -14,7 +14,7 @@ Atrium is a typeset home screen, not a grid of icons. Three rules hold the whole
 - **Two voices.** Inter Tight carries the large text (a variable grotesque, drawn at weight 250 for the clock so it reads as a poster rather than a label). Geist Mono carries only micro-labels and values at 9.5–10.5 sp with wide tracking, the way instrument panels are labelled. The contrast between the two is the hierarchy.
 - **Ink, not colour.** Everything is white at one of eight fixed opacities (`100 → 8%`). Consequence: no dividers are needed, dimming alone separates levels.
 
-**Scale.** The clock is 66 sp against 20 sp app rows — roughly 3.3:1. The clock is the only element that may compete for attention; everything else recedes. Sizes scale with display width, so the ratio holds from small phones to tablets.
+**Scale.** The clock is 74 sp against 20 sp app rows — roughly 3.7:1. The clock is the only element that may compete for attention; everything else recedes. Sizes scale with display width, so the ratio holds from small phones to tablets.
 
 ---
 
@@ -22,7 +22,7 @@ Atrium is a typeset home screen, not a grid of icons. Three rules hold the whole
 
 - **Stripped Visual Atoms**: Zero backgrounds, chips, or card wrappers. Pure typography with subtle press scaling (`0.975f`) and dimming (`0.5f`).
 - **Inverted Bottom-to-Top Layout**: App list and search results emerge directly above the search bar. Scrolling down sinks items into the search bar, pulling subsequent items from above.
-- **A home screen that opens in place**: Pinned apps sit on the exact baseline the search results use, and the `search` hint occupies the exact box the input will fill. Opening search therefore cross-fades one list into another instead of sliding a new layer over the top.
+- **A home screen that opens in place**: Pinned apps sit on the exact baseline the search results use, and the `SEARCH` affordance occupies the exact box the input will fill. Opening search therefore cross-fades one list into another instead of sliding a new layer over the top.
 - **Drawn Clock**: The clock is a custom `View`, not a `TextClock`. Tabular figures (`tnum`) mean digits never reflow; the colon is set at 34% ink; a minute change is a soft 420 ms cross-fade rather than a jump; seconds, date and 12/24-hour format are optional.
 - **Horizontal Category Columns**:
   - **Settings (`index = -1`)**: A real preference tree with collapsible sections, drill-down pages (e.g. Pinned Apps, every installed app with a switch) and an in-place filter. Paging here releases the keyboard.

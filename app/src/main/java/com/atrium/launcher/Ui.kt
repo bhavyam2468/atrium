@@ -204,7 +204,7 @@ internal class MiniSwitch(ctx: Context) : View(ctx) {
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        setMeasuredDimension(context.dpInt(42f), context.dpInt(26f))
+        setMeasuredDimension(context.dpInt(38f), context.dpInt(22f))
     }
 
     override fun onDraw(canvas: Canvas) {

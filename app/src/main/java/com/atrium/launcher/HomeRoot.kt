@@ -265,12 +265,9 @@ class HomeRoot(
         // Occupies exactly the box the search field will fill, so opening search is a swap
         // in place rather than a new layer arriving.
         homeHint.apply {
-            text = "search"
-            typeface = Typo.sans(context, 400)
-            setTextColor(0x4DFFFFFF)
+            text = "SEARCH"
+            type(11f, 450, 0x54FFFFFF, mono = true, tracking = 0.26f, caps = true)
             gravity = Gravity.CENTER
-            includeFontPadding = false
-            setSingleLine()
             isClickable = false
         }
         home.addView(
@@ -378,11 +375,11 @@ class HomeRoot(
         uiScale = s
 
         val side = dpI(22f)
-        home.setPadding(side, topInset + (h * 0.13f).toInt(), side, bottomInset)
+        home.setPadding(side, topInset + (h * 0.165f).toInt(), side, bottomInset)
         search.setPadding(0, topInset + dpI(10f), 0, bottomInset + dpI(14f))
         clock.scale = s
         input.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23f * s)
-        homeHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23f * s)
+        homeHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f * s)
         input.maxWidth = (w * 0.88f).toInt()
 
         val nw = (w * 0.86f).toInt()
@@ -427,7 +424,7 @@ class HomeRoot(
         pinSig = sig
         pins.removeAllViews()
 
-        val size = (if (settings.compact) 20f else 21.5f) * uiScale
+        val size = (if (settings.compact) 21f else 23f) * uiScale
         val dur = (420 * settings.animSpeed).toLong().coerceIn(160L, 900L)
         p.forEachIndexed { i, e ->
             val t = Label(context).apply {
@@ -552,7 +549,9 @@ class HomeRoot(
         home.scaleY = hs
         home.visibility = if (homeFade <= 0.01f) INVISIBLE else VISIBLE
 
-        val searchFade = smooth(0.1f, 0.72f, pc)
+        homeHint.alpha = 1f - smooth(0f, 0.28f, pc)
+
+        val searchFade = smooth(0.14f, 0.72f, pc)
         search.alpha = searchFade
         search.visibility = if (searchFade <= 0.004f) GONE else VISIBLE
 

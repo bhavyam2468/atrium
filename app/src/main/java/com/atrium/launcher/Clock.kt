@@ -141,7 +141,7 @@ internal class ClockView(ctx: Context, private val settings: LauncherSettings) :
 
     private fun applyType() {
         val c = context
-        timeSize = c.spToPx(66f * scale)
+        timeSize = c.spToPx(74f * scale)
         dateSize = c.spToPx(10.5f * scale)
         smallSize = c.spToPx(15f * scale)
 

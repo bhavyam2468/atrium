@@ -158,6 +158,8 @@ class SettingsColumnView(
         val padV = context.dpInt(if (settings.compact) 10f else 14f)
         val row = PressRow(context).apply {
             setPadding(context.dpInt(20f), padV, context.dpInt(20f), padV)
+            // Controls align with the title line, not the centre of a two-line row.
+            gravity = Gravity.TOP
         }
 
         val col = LinearLayout(context).apply { orientation = VERTICAL }
