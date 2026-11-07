@@ -10,36 +10,31 @@ import android.provider.Settings
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 
+/**
+ * Device-level concerns that aren't visual tokens: window policy, status bar
+ * visibility, and jumping the user into the right system screen.
+ */
 class LauncherSettings(private val activity: Activity) {
-    private val prefs: SharedPreferences = activity.getSharedPreferences("atrium_settings", Context.MODE_PRIVATE)
 
-    var hideStatusBar: Boolean
-        get() = prefs.getBoolean("hide_status_bar", false)
-        set(value) {
-            prefs.edit().putBoolean("hide_status_bar", value).apply()
-            applyStatusBar(value)
-        }
-
-    var blurEnabled: Boolean
-        get() = prefs.getBoolean("blur_enabled", true)
-        set(value) = prefs.edit().putBoolean("blur_enabled", value).apply()
-
-    // Animation duration multiplier: 0.5f (fast), 1.0f (normal), 1.5f (relaxed)
-    var animSpeed: Float
-        get() = prefs.getFloat("anim_speed", 1.0f)
-        set(value) = prefs.edit().putFloat("anim_speed", value).apply()
+    private val prefs: SharedPreferences =
+        activity.getSharedPreferences("atrium_settings", Context.MODE_PRIVATE)
 
     fun applyInitial() {
-        applyStatusBar(hideStatusBar)
+        applyBars()
     }
 
-    private fun applyStatusBar(hide: Boolean) {
-        val controller = activity.window.insetsController ?: return
-        if (hide) {
-            controller.hide(WindowInsets.Type.statusBars())
-        } else {
-            controller.show(WindowInsets.Type.statusBars())
+    fun applyBars() {
+        val c = activity.window.insetsController ?: return
+        val tokens = Layout.tokens
+        if (tokens != null) {
+            if (tokens.b(K.sysStatusBar)) c.show(WindowInsets.Type.statusBars())
+            else c.hide(WindowInsets.Type.statusBars())
+            if (tokens.b(K.sysNavBar)) c.show(WindowInsets.Type.navigationBars())
+            else c.hide(WindowInsets.Type.navigationBars())
+            return
         }
+        c.hide(WindowInsets.Type.statusBars())
+        c.hide(WindowInsets.Type.navigationBars())
     }
 
     fun openDefaultHomeSettings() {
@@ -47,12 +42,12 @@ class LauncherSettings(private val activity: Activity) {
             val intent = Intent(Settings.ACTION_HOME_SETTINGS)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             activity.startActivity(intent)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             try {
                 val intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 activity.startActivity(intent)
-            } catch (_: Exception) {
+            } catch (e2: Exception) {
                 openAppSettings()
             }
         }
@@ -65,6 +60,46 @@ class LauncherSettings(private val activity: Activity) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             activity.startActivity(intent)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {}
     }
+
+    fun pickWallpaper(requestCode: Int = 202) {
+        try {
+            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "image/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            activity.startActivityForResult(intent, requestCode)
+        } catch (e: Exception) {}
+    }
+
+    fun persistWallpaper(uri: Uri?) {
+        if (uri == null) return
+        try {
+            activity.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (e: Exception) {}
+        Layout.tokens?.set(K.bgWallpaper, uri.toString())
+        Layout.tokens?.set(K.bgMode, "wallpaper")
+        Layout.tokens?.commit()
+    }
+}
+
+/** A tiny service locator for things views need but shouldn't own. */
+object Layout {
+    @Volatile var tokens: Tokens? = null
+    @Volatile var settings: LauncherSettings? = null
+    @Volatile var index: AppIndex? = null
+    @Volatile var root: HomeRoot? = null
+    @Volatile var registry: SettingsRegistry? = null
+}
+
+/** Bridges the token store to SharedPreferences. */
+class PrefsStore(private val prefs: SharedPreferences) : Store {
+    override fun read(): String? = prefs.getString(KEY, null)
+    override fun write(value: String) { prefs.edit().putString(KEY, value).apply() }
+
+    companion object { const val KEY = "token_map" }
 }

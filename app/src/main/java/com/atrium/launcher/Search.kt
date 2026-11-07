@@ -12,6 +12,7 @@ class Result(
     val title: String,
     val subtitle: String? = null,
     val score: Int = 0,
+    val appEntry: AppEntry? = null,
     val run: (View?) -> Unit
 )
 
@@ -36,7 +37,7 @@ class AppSearch(private val index: AppIndex) : SearchProvider {
         if (trimmed.isEmpty()) {
             // When query is empty, return all installed apps sorted alphabetically
             return allApps.map { a ->
-                Result(a.label, score = 0) { v -> index.launch(a, v) }
+                Result(a.label, score = 0, appEntry = a) { v -> index.launch(a, v) }
             }
         }
 
@@ -51,7 +52,7 @@ class AppSearch(private val index: AppIndex) : SearchProvider {
         // Highest score first, then alphabetically
         scored.sortWith(compareByDescending<Pair<Int, AppEntry>> { it.first }.thenBy { it.second.key })
         return scored.take(limit).map { (score, a) ->
-            Result(a.label, score = score) { v -> index.launch(a, v) }
+            Result(a.label, score = score, appEntry = a) { v -> index.launch(a, v) }
         }
     }
 }
@@ -139,8 +140,19 @@ class WebSearch(private val go: (String, View?) -> Unit) : SearchProvider {
         if (t.isEmpty()) {
             return listOf(Result("Search the web", score = 0) { go("", it) })
         }
-        return listOf(Result("Search “$t” on web", score = 1) { go(t, it) })
+        return listOf(Result("Search “$t” on web", subtitle = "Google", score = 1) { go(t, it) })
     }
+}
+
+/** Wraps a provider so a token can switch its column off entirely. */
+class GatedProvider(
+    private val inner: SearchProvider,
+    private val enabled: () -> Boolean
+) : SearchProvider {
+    override val id get() = inner.id
+    override val title get() = inner.title
+    override fun query(q: String, limit: Int): List<Result> =
+        if (enabled()) inner.query(q, limit) else emptyList()
 }
 
 class SearchEngine(private val providers: List<SearchProvider>) {
