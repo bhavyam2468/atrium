@@ -69,6 +69,7 @@ internal class ClockText(ctx: Context) : TextView(ctx) {
         maxLines = 1
         ellipsize = null
         includeFontPadding = false
+        render()
     }
 
     var pattern: String = "h:mm"
