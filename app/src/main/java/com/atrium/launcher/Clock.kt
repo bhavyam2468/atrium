@@ -63,13 +63,9 @@ internal class ClockView(ctx: Context, private val settings: LauncherSettings) :
     private var flashAnim: ValueAnimator? = null
 
     private val handler = Handler(Looper.getMainLooper())
+    private var active = false
     private val ticker = object : Runnable {
-        override fun run() {
-            sync()
-            val now = System.currentTimeMillis()
-            val period = if (settings.showSeconds) 1000L else 60_000L
-            handler.postDelayed(this, period - now % period + 12L)
-        }
+        override fun run() = sync()
     }
 
     init {
@@ -77,7 +73,31 @@ internal class ClockView(ctx: Context, private val settings: LauncherSettings) :
         sync()
     }
 
+    /** Schedules the next tick against the wall clock, so the minute flips on the minute. */
+    private fun scheduleTick() {
+        handler.removeCallbacks(ticker)
+        if (!active) return
+        val now = System.currentTimeMillis()
+        val period = if (settings.showSeconds) 1000L else 60_000L
+        handler.postDelayed(ticker, period - now % period + 12L)
+    }
+
+    fun pause() {
+        active = false
+        handler.removeCallbacks(ticker)
+    }
+
+    fun resume() {
+        active = true
+        sync()
+    }
+
     fun sync() {
+        refresh()
+        scheduleTick()
+    }
+
+    private fun refresh() {
         val loc = locale()
         val cal = Calendar.getInstance()
         val use24 = when (settings.clockFormat) {
@@ -254,12 +274,11 @@ internal class ClockView(ctx: Context, private val settings: LauncherSettings) :
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        handler.removeCallbacks(ticker)
-        handler.post(ticker)
+        resume()
     }
 
     override fun onDetachedFromWindow() {
-        handler.removeCallbacks(ticker)
+        pause()
         flashAnim?.cancel()
         super.onDetachedFromWindow()
     }

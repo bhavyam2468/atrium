@@ -633,6 +633,7 @@ class HomeRoot(
     }
 
     fun reset() {
+        clock.pause()
         spring.stop()
         isOpen = false
         spring.snap(0f)
@@ -680,6 +681,7 @@ class HomeRoot(
     }
 
     fun playIntro() {
+        clock.resume()
         animateFocus(1f, 560, ExpoOut)
     }
 

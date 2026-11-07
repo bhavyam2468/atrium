@@ -55,6 +55,17 @@ Settings are also searchable — the same fzf matcher indexes titles, descriptio
 
 ---
 
+## Design preview
+
+`preview/index.html` is a single self-contained page that recreates the interface in a browser: the
+same type scale, the same spring integrator, the same pager, the same settings tree. It exists
+because the launcher targets a 1080 × 2340 screen and the composition is easier to judge at a fixed
+392 × 848 frame. Serve it over any static host — for example `python3 -m http.server` from the
+repository root, then open `/preview/`. The page pulls both typefaces from
+`app/src/main/res/font/`, so it needs the repository, not just the file.
+
+---
+
 ## Architecture & Codebase
 
 ```
