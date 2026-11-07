@@ -6,7 +6,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Rect
+import android.graphics.drawable.BitmapDrawable
 import android.os.Handler
 import android.os.Looper
 import android.os.UserHandle
@@ -19,7 +22,10 @@ class AppEntry(
     val key: String,
     val component: ComponentName,
     val user: UserHandle,
-)
+) {
+    /** Pre-rendered square icon bitmap; loaded lazily off the main thread. */
+    @Volatile var icon: BitmapDrawable? = null
+}
 
 /**
  * Source of truth for installed launchable activities. Uses LauncherApps (not PackageManager)
@@ -81,6 +87,32 @@ class AppIndex(private val activity: Activity) {
         from?.getGlobalVisibleRect(r)
         onLaunch?.invoke()
         try { la.startMainActivity(e.component, e.user, r, opts) } catch (_: Exception) { onLaunchFailed?.invoke() }
+    }
+
+    /** Render (or fetch cached) icon for an entry and hand it to the view on the main thread. */
+    fun bindIcon(view: IconView, e: AppEntry) {
+        e.icon?.let {
+            view.icon = it
+            return
+        }
+        io.execute {
+            val d = e.icon ?: renderIcon(e)?.also { e.icon = it }
+            if (d != null) main.post { if (view.parent != null) view.icon = d }
+        }
+    }
+
+    private fun renderIcon(e: AppEntry): BitmapDrawable? {
+        return try {
+            val info = la.getActivityList(e.component.packageName, e.user)
+                .firstOrNull { it.componentName == e.component } ?: return null
+            val d = info.getIcon(activity.resources.displayMetrics.densityDpi) ?: return null
+            val size = 96
+            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            d.setBounds(0, 0, size, size)
+            d.draw(canvas)
+            BitmapDrawable(activity.resources, bmp)
+        } catch (_: Exception) { null }
     }
 
     private companion object {

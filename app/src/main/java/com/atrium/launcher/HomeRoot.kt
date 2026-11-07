@@ -2,31 +2,34 @@ package com.atrium.launcher
 
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.graphics.Color
 import android.graphics.RenderEffect
 import android.graphics.Shader
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
-import android.util.TypedValue
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsAnimation
+import android.view.WindowManager
+import android.animation.TimeInterpolator
 import android.view.animation.AccelerateInterpolator
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.TextClock
-import android.widget.TextView
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -42,6 +45,9 @@ import kotlin.math.min
  * Settings: index = -1 (left of apps; dedicated browse/search column, excluded from global priority query)
  * Apps:     index = 0  (primary apps column, displays full app list bottom-to-top when search is empty)
  * Other:    index = 1, 2, ... (priority-ranked search columns: Contacts, Web, etc.)
+ *
+ * Every visual property is read from [AtriumTheme]; the design studio edits
+ * the theme live and the home re-skins in place.
  */
 @SuppressLint("ClickableViewAccessibility")
 class HomeRoot(
@@ -49,43 +55,34 @@ class HomeRoot(
     private val engine: SearchEngine,
     private val index: AppIndex,
     private val settings: LauncherSettings,
-    private val registry: SettingsRegistry
+    private val registry: SettingsRegistry,
+    private val theme: AtriumTheme
 ) : FrameLayout(ctx) {
 
+    private val act: Activity = ctx as Activity
     private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
     private fun dp(v: Float) = context.dp(v)
 
     private val stage = Layer(ctx)
-    private val home = VLayer(ctx)
-    private val clockRow = LinearLayout(ctx)
-    private val pins = VLayer(ctx)
+    private val homeContent = FrameLayout(ctx)
+    private var clockBlock: ViewGroup? = null
+    private val pinsRow = LinearLayout(ctx)
 
     private val search = VLayer(ctx)
     private val colsBox = Layer(ctx)
+    private val searchBar = VLayer(ctx)
     private val input = EditText(ctx)
+    private val inputUnderline = View(ctx)
 
     // Settings Column (Left of apps)
     private inner class SettingsCol {
         val view = FrameLayout(context).apply { visibility = GONE }
-        val settingsView = SettingsColumnView(context, registry)
+        val settingsView = SettingsColumnView(context, registry, theme, view)
         val pos = Spring({ applySettingsCol() }, {}, 300f, 0.6f)
         val pres = Spring({ applySettingsCol() }, { v -> if (v <= 0f) view.visibility = GONE }, 420f, 1f)
 
         init {
-            val title = TextView(context).apply {
-                text = "SETTINGS"
-                setTextColor(0x55FFFFFF)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                setPadding(0, 0, 0, dp(10f).toInt())
-                gravity = Gravity.CENTER
-            }
-            val wrap = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                addView(title, LinearLayout.LayoutParams(-1, -2))
-                addView(settingsView, LinearLayout.LayoutParams(-1, 0, 1f))
-            }
-            view.addView(wrap, FrameLayout.LayoutParams(-1, -1, Gravity.BOTTOM))
+            view.addView(settingsView, FrameLayout.LayoutParams(-1, -1))
             colsBox.addView(view, FrameLayout.LayoutParams(colW, -1, Gravity.CENTER_HORIZONTAL))
         }
 
@@ -103,8 +100,8 @@ class HomeRoot(
         }
         val itemsLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
         }
+        val header = Label(context)
 
         var live = false
         var first: Result? = null
@@ -114,15 +111,7 @@ class HomeRoot(
         init {
             scrollView.addView(itemsLayout, FrameLayout.LayoutParams(-1, -2))
 
-            val header = TextView(context).apply {
-                text = titleName.uppercase()
-                setTextColor(0x55FFFFFF)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                setPadding(0, 0, 0, dp(6f).toInt())
-                gravity = Gravity.CENTER
-            }
-            val wrap = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
+            val wrap = VLayer(context).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
                 addView(header, LinearLayout.LayoutParams(-1, -2))
                 addView(scrollView, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -138,15 +127,16 @@ class HomeRoot(
             // is placed at the bottom of itemsLayout (right above the searchbar),
             // and lower-priority results extend upwards.
             for (j in res.indices.reversed()) {
-                val x = res[j]
-                val l = Label(context).apply {
-                    styleLabel(this, 24f)
-                    gravity = Gravity.CENTER
-                    text = if (x.subtitle != null) "${x.title} · ${x.subtitle}" else x.title
-                    setOnClickListener { x.run(this) }
-                }
-                itemsLayout.addView(l, LinearLayout.LayoutParams(-1, -2))
+                val l = HomeComposer.buildResultRow(context, theme, index, res[j])
+                itemsLayout.addView(l, LinearLayout.LayoutParams(-2, -2))
             }
+
+            itemsLayout.gravity = resultGravity()
+            header.text = titleName.uppercase()
+            theme.styleHeader(header)
+            header.setPadding(0, 0, 0, dp(6f).toInt())
+            header.gravity = Gravity.CENTER
+            header.visibility = if (theme.show_headers) VISIBLE else GONE
 
             itemsLayout.post {
                 val contentH = itemsLayout.height
@@ -162,7 +152,7 @@ class HomeRoot(
         }
     }
 
-    private val settingsCol by lazy { SettingsCol() }
+    private val settingsCol = SettingsCol()
     private val cols = LinkedHashMap<String, Col>()
     private var liveOrder: List<String> = emptyList() // IDs of active right-side columns: "apps", "contacts", "web"
     private var focusId: String? = null // null means settings (-1), otherwise "apps", "contacts", etc.
@@ -180,20 +170,17 @@ class HomeRoot(
     private var imeAnimating = false
     private var pinSig = ""
 
-    init {
-        setBackgroundColor(Color.BLACK)
+    private var homeBaseY = 0f
+    private var searchP = 0f
+    private var stageBlur = 0f
 
-        val date = TextClock(ctx).apply {
-            format12Hour = "EEE, d MMMM"; format24Hour = "EEE, d MMMM"; styleLabel(this, 24f)
-        }
-        val time = TextClock(ctx).apply {
-            format12Hour = "h:mm"; format24Hour = "H:mm"; styleLabel(this, 24f)
-        }
-        clockRow.addView(date)
-        clockRow.addView(time, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12f).toInt() })
-        home.addView(clockRow, LinearLayout.LayoutParams(-2, -2))
-        home.addView(pins, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(120f).toInt() })
-        stage.addView(home, LayoutParams(-1, -1))
+    private val themeListener: (String?) -> Unit = { key -> onThemeChanged(key) }
+
+    init {
+        theme.addListener(themeListener)
+
+        homeContent.addView(pinsRow, FrameLayout.LayoutParams(-1, -2))
+        stage.addView(homeContent, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
         addView(stage, LayoutParams(-1, -1))
 
         input.apply {
@@ -202,7 +189,7 @@ class HomeRoot(
             setHintTextColor(0x66FFFFFF)
             hint = "search"
             gravity = Gravity.CENTER
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 28f)
             includeFontPadding = false
             setSingleLine()
             minWidth = dp(220f).toInt()
@@ -236,7 +223,12 @@ class HomeRoot(
         }
         search.gravity = Gravity.BOTTOM
         search.addView(colsBox, LinearLayout.LayoutParams(-1, 0, 1f))
-        search.addView(input, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.CENTER_HORIZONTAL })
+        searchBar.addView(input, LinearLayout.LayoutParams(-2, -2))
+        inputUnderline.visibility = GONE
+        searchBar.addView(inputUnderline, LinearLayout.LayoutParams(-1, 1).apply {
+            topMargin = dp(8f).toInt()
+        })
+        search.addView(searchBar, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.CENTER_HORIZONTAL })
         search.visibility = GONE
         addView(search, LayoutParams(-1, -1))
 
@@ -261,6 +253,12 @@ class HomeRoot(
                 }
             }
         })
+
+        buildClock()
+        refreshPins()
+        restyleSearchChrome()
+        restyleLayout()
+        applyBackground()
         setProgress(0f)
     }
 
@@ -273,12 +271,17 @@ class HomeRoot(
     }
 
     private fun metrics() {
-        val h = height
-        val side = dp(20f).toInt()
-        home.setPadding(side + dp(2f).toInt(), topInset + (h * 0.2f).toInt(), side, bottomInset)
+        val sidePx = dp(theme.side_inset).toInt()
+        stage.setPadding(
+            sidePx + dp(4f).toInt(), topInset + dp(10f).toInt(),
+            sidePx, bottomInset + dp(12f).toInt()
+        )
         search.setPadding(0, topInset + dp(10f).toInt(), 0, bottomInset + dp(14f).toInt())
+        (pinsRow.layoutParams as? FrameLayout.LayoutParams)?.let {
+            it.topMargin = dp(theme.clock_gap).toInt()
+        }
 
-        val nw = (width * 0.85f).toInt()
+        val nw = (width * theme.column_width).toInt()
         if (nw != colW) {
             colW = nw
             settingsCol.view.layoutParams = FrameLayout.LayoutParams(colW, -1, Gravity.CENTER_HORIZONTAL)
@@ -288,6 +291,7 @@ class HomeRoot(
             }
             applySettingsCol()
         }
+        positionHome()
     }
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
@@ -295,12 +299,140 @@ class HomeRoot(
         metrics()
     }
 
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        positionHome()
+    }
+
+    /** Vertical anchor of the home block; translation only, never re-measure. */
+    private fun positionHome() {
+        val h = stage.height
+        if (h == 0) return
+        val avail = (h - stage.paddingTop - stage.paddingBottom - homeContent.height).coerceAtLeast(0f)
+        homeBaseY = avail * theme.anchor_y
+        applyHomeTransform()
+    }
+
+    private fun applyHomeTransform() {
+        homeContent.translationY = homeBaseY + searchP * dp(30f)
+        val s = 1f - 0.05f * searchP
+        homeContent.scaleX = s
+        homeContent.scaleY = s
+    }
+
+    // ---------- Theme ----------
+
+    private fun buildClock() {
+        clockBlock?.let { homeContent.removeView(it) }
+        val b = HomeComposer.buildClockBlock(context, theme)
+        homeContent.addView(b, 0, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or theme.hGravity()))
+        for (i in 0 until b.childCount) {
+            b.getChildAt(i).setOnLongClickListener { openStudio(); true }
+        }
+        clockBlock = b
+        positionHome()
+    }
+
+    private fun restyleLayout() {
+        (clockBlock?.layoutParams as? FrameLayout.LayoutParams)?.let {
+            it.gravity = Gravity.TOP or theme.hGravity()
+        }
+        pinsRow.gravity = theme.pinsGravity()
+        pinsRow.visibility = if (theme.pins_visible) VISIBLE else GONE
+        homeContent.requestLayout()
+    }
+
+    private fun restylePins() {
+        for (i in 0 until pinsRow.childCount) {
+            (pinsRow.getChildAt(i) as? Label)?.let { HomeComposer.stylePin(it, theme) }
+        }
+    }
+
+    private fun restyleSearchChrome() {
+        theme.styleUi(input, theme.search_size)
+        input.setTextColor(theme.fg)
+        input.setHintTextColor(theme.colorAt(0.5f))
+        input.highlightColor = theme.colorAt(0.28f)
+        (input.textCursorDrawable as? GradientDrawable)?.setColor(theme.accentColor)
+        when (theme.search_style) {
+            1 -> {
+                input.background = null
+                input.setPadding(dp(2f).toInt(), dp(8f).toInt(), dp(2f).toInt(), dp(6f).toInt())
+                inputUnderline.visibility = VISIBLE
+                inputUnderline.setBackgroundColor(theme.colorAt(0.30f))
+            }
+            2 -> {
+                input.background = GradientDrawable().apply {
+                    cornerRadius = dp(999f)
+                    setColor(theme.colorAt(0.10f))
+                }
+                input.setPadding(dp(26f).toInt(), dp(10f).toInt(), dp(26f).toInt(), dp(10f).toInt())
+                inputUnderline.visibility = GONE
+            }
+            else -> {
+                input.background = null
+                input.setPadding(dp(2f).toInt(), dp(8f).toInt(), dp(2f).toInt(), dp(8f).toInt())
+                inputUnderline.visibility = GONE
+            }
+        }
+    }
+
+    private fun resultGravity(): Int = when (theme.result_align) {
+        0 -> Gravity.START
+        2 -> Gravity.END
+        else -> Gravity.CENTER_HORIZONTAL
+    }
+
+    private fun restyleRows() {
+        for (c in cols.values) {
+            theme.styleHeader(c.header)
+            c.header.visibility = if (theme.show_headers) VISIBLE else GONE
+            c.itemsLayout.gravity = resultGravity()
+            for (i in 0 until c.itemsLayout.childCount) {
+                HomeComposer.restyleResultRow(c.itemsLayout.getChildAt(i), theme)
+            }
+        }
+    }
+
+    private fun applyBackground() {
+        val w = act.window
+        if (theme.background_mode == 1) {
+            // Window stays transparent so the system wallpaper shows through;
+            // the dim scrim is drawn at the view level so it can animate cheaply.
+            w.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+            w.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setBackgroundColor(
+                Color.argb((theme.wallpaper_dim * 255).toInt(), 0, 0, 0)
+            )
+        } else {
+            w.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+            w.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+            setBackgroundColor(Color.BLACK)
+        }
+    }
+
+    private fun onThemeChanged(key: String?) {
+        if (key == null || key in REBUILD_CLOCK_KEYS) buildClock()
+        else clockBlock?.let { HomeComposer.restyleClockBlock(it, theme) }
+        restylePins()
+        restyleSearchChrome()
+        restyleLayout()
+        when (key) {
+            null, Tk.SIDE_INSET, Tk.COLUMN_WIDTH -> metrics()
+            Tk.ANCHOR_Y -> positionHome()
+            Tk.BACKGROUND, Tk.WALLPAPER_DIM -> applyBackground()
+            else -> {}
+        }
+        if (key == null || key in REBUILD_ROW_KEYS) refreshResults() else restyleRows()
+        settingsCol.settingsView.markDirty()
+    }
+
     // ---------- Data ----------
 
     fun refresh() {
         refreshPins()
         refreshResults()
-        settingsCol.settingsView.rebuild()
+        settingsCol.settingsView.rebuildIfDirty()
     }
 
     private fun refreshPins() {
@@ -308,14 +440,15 @@ class HomeRoot(
         val sig = p.joinToString { it.component.flattenToString() }
         if (sig == pinSig) return
         pinSig = sig
-        pins.removeAllViews()
+        pinsRow.removeAllViews()
         for (e in p) {
             val t = Label(context)
-            styleLabel(t, 28f)
+            HomeComposer.stylePin(t, theme)
             t.text = e.label
             t.setOnClickListener { index.launch(e, t) }
-            pins.addView(t, LinearLayout.LayoutParams(-2, -2))
+            pinsRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(22f).toInt() })
         }
+        restyleLayout()
     }
 
     private fun refreshResults() {
@@ -408,9 +541,20 @@ class HomeRoot(
 
     private fun setProgress(p: Float) {
         val pc = p.coerceIn(0f, 1f)
-        home.alpha = (1f - pc * 1.8f).coerceIn(0f, 1f)
-        home.translationY = pc * dp(36f)
-        home.visibility = if (pc >= 0.56f) INVISIBLE else VISIBLE
+        searchP = pc
+        stage.alpha = (1f - pc * 1.8f).coerceIn(0f, 1f)
+        stage.visibility = if (pc >= 0.56f) INVISIBLE else VISIBLE
+        applyHomeTransform()
+        if (Build.VERSION.SDK_INT >= 31) {
+            val target = if (settings.blurEnabled) pc * 22f else 0f
+            if (abs(target - stageBlur) > 0.4f) {
+                stageBlur = target
+                stage.setRenderEffect(
+                    if (target < 0.6f) null
+                    else RenderEffect.createBlurEffect(target, target, Shader.TileMode.CLAMP)
+                )
+            }
+        }
         search.alpha = (pc * 1.6f - 0.15f).coerceIn(0f, 1f)
         applySearchY(p)
     }
@@ -420,7 +564,10 @@ class HomeRoot(
     }
 
     private fun settled(p: Float) {
-        if (p <= 0f) closeCleanup()
+        if (p <= 0f) {
+            closeCleanup()
+            if (studio == null) playIntro()
+        }
     }
 
     private fun closeCleanup() {
@@ -440,6 +587,7 @@ class HomeRoot(
             c.pres.snap(0f)
             c.pos.snap(0f)
             c.view.visibility = GONE
+            c.itemsLayout.removeAllViews()
         }
     }
 
@@ -478,7 +626,11 @@ class HomeRoot(
     }
 
     fun onBack(): Boolean {
+        studio?.let { s ->
+            if (s.back()) return true
+        }
         if (open) {
+            if (settingsCol.settingsView.consumeBack()) return true
             closeSearch()
             return true
         }
@@ -491,7 +643,67 @@ class HomeRoot(
         spring.snap(0f)
         hideIme()
         closeCleanup()
+        if (studio != null) {
+            val s = studio
+            studio = null
+            if (s != null) removeView(s)
+        }
+        setStudioDim(0f)
     }
+
+    // ---------- Design studio ----------
+
+    fun openStudio() {
+        if (studio != null) return
+        if (open) {
+            spring.stop()
+            spring.snap(0f)
+            closeCleanup()
+        }
+        hideIme()
+        setProgress(0f)
+        val s = DesignSheet(context, theme, index, registry) { closeStudio() }
+        studio = s
+        addView(s, LayoutParams(-1, -1))
+        s.enter()
+        animateStudioDim(1f)
+        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+    }
+
+    private fun closeStudio() {
+        val s = studio ?: return
+        studio = null
+        animateStudioDim(0f)
+        postDelayed({ removeView(s) }, 340)
+    }
+
+    private fun setStudioDim(v: Float) {
+        stage.alpha = 1f - 0.55f * v
+        val s = 1f - 0.03f * v
+        stage.scaleX = s
+        stage.scaleY = s
+        if (Build.VERSION.SDK_INT >= 31) {
+            val r = if (settings.blurEnabled) v * 16f else 0f
+            stage.setRenderEffect(
+                if (r < 0.6f) null
+                else RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP)
+            )
+        }
+    }
+
+    private fun animateStudioDim(to: Float) {
+        studioDimAnim?.cancel()
+        studioDimAnim = ValueAnimator.ofFloat(studioDim, to).apply {
+            duration = 320
+            interpolator = ExpoOut
+            addUpdateListener { setStudioDim(it.animatedValue as Float) }
+            start()
+        }
+    }
+
+    private var studioDim = 0f
+    private var studioDimAnim: ValueAnimator? = null
+    private var studio: DesignSheet? = null
 
     // ---------- Blur <-> focus ----------
 
@@ -504,15 +716,16 @@ class HomeRoot(
         alpha = (f * 2.2f).coerceIn(0f, 1f)
         val s = 1f + 0.05f * k
         scaleX = s; scaleY = s
-        if (Build.VERSION.SDK_INT >= 31 && settings.blurEnabled) {
-            val r = k * 28f
-            setRenderEffect(if (r < 0.6f) null else RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP))
-        } else if (Build.VERSION.SDK_INT >= 31) {
-            setRenderEffect(null)
+        if (Build.VERSION.SDK_INT >= 31) {
+            val r = if (settings.blurEnabled) k * 28f else 0f
+            setRenderEffect(
+                if (r < 0.6f) null
+                else RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP)
+            )
         }
     }
 
-    private fun animateFocus(to: Float, ms: Long, interp: android.animation.TimeInterpolator) {
+    private fun animateFocus(to: Float, ms: Long, interp: TimeInterpolator) {
         focusAnim?.cancel()
         val duration = (ms * settings.animSpeed).toLong()
         focusAnim = ValueAnimator.ofFloat(fv, to).apply {
@@ -526,10 +739,24 @@ class HomeRoot(
     fun prepareIntro() {
         focusAnim?.cancel()
         setFocus(0f)
+        setIntro(0f)
     }
 
     fun playIntro() {
         animateFocus(1f, 520, ExpoOut)
+        setIntro(0f)
+        clockBlock?.let { b ->
+            b.animate().alpha(1f).translationY(0f).setDuration(560).setInterpolator(ExpoOut).start()
+        }
+        pinsRow.animate().alpha(1f).translationY(0f).setStartDelay(80)
+            .setDuration(560).setInterpolator(ExpoOut).start()
+    }
+
+    private fun setIntro(v: Float) {
+        clockBlock?.alpha = v
+        clockBlock?.translationY = (1f - v) * dp(16f)
+        pinsRow.alpha = v
+        pinsRow.translationY = (1f - v) * dp(24f)
     }
 
     fun blurOut() {
@@ -559,6 +786,7 @@ class HomeRoot(
     }
 
     private fun track(e: MotionEvent, own: Boolean) {
+        if (studio != null) return
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = e.x
@@ -700,5 +928,7 @@ class HomeRoot(
 
     companion object {
         const val MAX_VISIBLE_ROWS = 12
+        private val REBUILD_CLOCK_KEYS = setOf(Tk.ARRANGEMENT, Tk.DATE_FORMAT)
+        private val REBUILD_ROW_KEYS = setOf(Tk.ROW_STYLE, Tk.SHOW_SUBTITLES, Tk.SHOW_HEADERS)
     }
 }

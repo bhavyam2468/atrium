@@ -7,11 +7,12 @@ import android.net.Uri
 import android.provider.ContactsContract
 import android.view.View
 
-/** One row in universal search. */
+/** One row in universal search. `entry` carries the app for icon binding. */
 class Result(
     val title: String,
     val subtitle: String? = null,
     val score: Int = 0,
+    val entry: AppEntry? = null,
     val run: (View?) -> Unit
 )
 
@@ -36,7 +37,7 @@ class AppSearch(private val index: AppIndex) : SearchProvider {
         if (trimmed.isEmpty()) {
             // When query is empty, return all installed apps sorted alphabetically
             return allApps.map { a ->
-                Result(a.label, score = 0) { v -> index.launch(a, v) }
+                Result(a.label, score = 0, entry = a) { v -> index.launch(a, v) }
             }
         }
 
@@ -51,7 +52,7 @@ class AppSearch(private val index: AppIndex) : SearchProvider {
         // Highest score first, then alphabetically
         scored.sortWith(compareByDescending<Pair<Int, AppEntry>> { it.first }.thenBy { it.second.key })
         return scored.take(limit).map { (score, a) ->
-            Result(a.label, score = score) { v -> index.launch(a, v) }
+            Result(a.label, score = score, entry = a) { v -> index.launch(a, v) }
         }
     }
 }

@@ -15,6 +15,7 @@ import android.window.OnBackInvokedDispatcher
 class LauncherActivity : Activity() {
     private lateinit var index: AppIndex
     private lateinit var settings: LauncherSettings
+    private lateinit var theme: AtriumTheme
     private lateinit var registry: SettingsRegistry
     private lateinit var root: HomeRoot
 
@@ -27,7 +28,8 @@ class LauncherActivity : Activity() {
         }
 
         settings = LauncherSettings(this)
-        registry = SettingsRegistry(this, settings)
+        theme = AtriumTheme(this)
+        registry = SettingsRegistry(this, settings, theme)
         index = AppIndex(this)
 
         val engine = SearchEngine(listOf(
@@ -39,7 +41,8 @@ class LauncherActivity : Activity() {
             }
         ))
 
-        root = HomeRoot(this, engine, index, settings, registry)
+        root = HomeRoot(this, engine, index, settings, registry, theme)
+        registry.onOpenStudio = { root.openStudio() }
         root.prepareIntro()
         setContentView(root)
 
