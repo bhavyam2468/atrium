@@ -24,7 +24,9 @@ class LauncherSettings(private val activity: Activity) {
     }
 
     fun applyBars() {
-        val c = activity.window.insetsController ?: return
+        val window = activity.window ?: return
+        if (window.peekDecorView() == null) return
+        val c = try { window.insetsController } catch (_: Exception) { null } ?: return
         val tokens = Layout.tokens
         if (tokens != null) {
             if (tokens.b(K.sysStatusBar)) c.show(WindowInsets.Type.statusBars())
