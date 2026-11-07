@@ -12,7 +12,7 @@ class Result(
     val title: String,
     val subtitle: String? = null,
     val score: Int = 0,
-    val run: (View?) -> Unit
+    val run: (View?) -> Unit,
 )
 
 /** A category of results. Providers are registered in priority order. */
@@ -35,20 +35,14 @@ class AppSearch(private val index: AppIndex) : SearchProvider {
 
         if (trimmed.isEmpty()) {
             // When query is empty, return all installed apps sorted alphabetically
-            return allApps.map { a ->
-                Result(a.label, score = 0) { v -> index.launch(a, v) }
-            }
+            return allApps.map { a -> Result(a.label, score = 0) { v -> index.launch(a, v) } }
         }
 
-        // Fuzzy search using FZF
         val scored = ArrayList<Pair<Int, AppEntry>>()
         for (a in allApps) {
             val score = Fzf.score(trimmed, a.label) ?: Fzf.score(trimmed, a.key)
-            if (score != null) {
-                scored += score to a
-            }
+            if (score != null) scored += score to a
         }
-        // Highest score first, then alphabetically
         scored.sortWith(compareByDescending<Pair<Int, AppEntry>> { it.first }.thenBy { it.second.key })
         return scored.take(limit).map { (score, a) ->
             Result(a.label, score = score) { v -> index.launch(a, v) }
@@ -56,25 +50,26 @@ class AppSearch(private val index: AppIndex) : SearchProvider {
     }
 }
 
-class ContactsSearch(private val context: Context) : SearchProvider {
+class ContactsSearch(
+    private val context: Context,
+    private val settings: LauncherSettings,
+) : SearchProvider {
     override val id = "contacts"
     override val title = "Contacts"
 
     override fun query(q: String, limit: Int): List<Result> {
         val trimmed = q.trim()
-
-        // Check permission without crashing
+        if (!settings.contactsInSearch) return emptyList()
         if (context.checkSelfPermission(android.Manifest.permission.READ_CONTACTS) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            return emptyList()
-        }
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return emptyList()
 
         val results = ArrayList<Pair<Int, Result>>()
         val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
             ContactsContract.CommonDataKinds.Phone.NUMBER,
-            ContactsContract.CommonDataKinds.Phone.CONTACT_ID
+            ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
         )
 
         try {
@@ -100,7 +95,8 @@ class ContactsSearch(private val context: Context) : SearchProvider {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
                             context.startActivity(callIntent)
-                        } catch (_: Exception) {}
+                        } catch (_: Exception) {
+                        }
                     }
 
                     if (trimmed.isEmpty()) {
@@ -118,7 +114,8 @@ class ContactsSearch(private val context: Context) : SearchProvider {
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
 
         if (trimmed.isEmpty()) {
             results.sortBy { it.second.title.lowercase(java.util.Locale.ROOT) }
@@ -130,17 +127,28 @@ class ContactsSearch(private val context: Context) : SearchProvider {
     }
 }
 
-class WebSearch(private val go: (String, View?) -> Unit) : SearchProvider {
+class WebSearch(
+    private val settings: LauncherSettings,
+    private val go: (String, View?) -> Unit,
+) : SearchProvider {
     override val id = "web"
     override val title = "Web"
 
     override fun query(q: String, limit: Int): List<Result> {
         val t = q.trim()
-        if (t.isEmpty()) {
-            return listOf(Result("Search the web", score = 0) { go("", it) })
+        val engine = engineName(settings.webEngine)
+        return if (t.isEmpty()) {
+            listOf(Result("Search the web", engine, score = 0) { v -> go("", v) })
+        } else {
+            listOf(Result("Search \u201C$t\u201D", engine, score = 1) { v -> go(t, v) })
         }
-        return listOf(Result("Search “$t” on web", score = 1) { go(t, it) })
     }
+}
+
+fun engineName(index: Int): String = when (index) {
+    1 -> "DuckDuckGo"
+    2 -> "Brave Search"
+    else -> "Google"
 }
 
 class SearchEngine(private val providers: List<SearchProvider>) {
@@ -176,7 +184,6 @@ class SearchEngine(private val providers: List<SearchProvider>) {
             }
         }
 
-        // Sort descending by highest match score, then tiePriority
         scored.sortWith(
             compareByDescending<Triple<Column, Int, Int>> { it.second }
                 .thenByDescending { it.third }
@@ -186,6 +193,12 @@ class SearchEngine(private val providers: List<SearchProvider>) {
     }
 }
 
-fun webIntent(q: String) =
-    Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(q)))
-
+fun webIntent(q: String, engine: Int = 0): Intent {
+    val query = q.trim()
+    val url = when (engine) {
+        1 -> if (query.isEmpty()) "https://duckduckgo.com" else "https://duckduckgo.com/?q=" + Uri.encode(query)
+        2 -> if (query.isEmpty()) "https://search.brave.com" else "https://search.brave.com/search?q=" + Uri.encode(query)
+        else -> if (query.isEmpty()) "https://www.google.com" else "https://www.google.com/search?q=" + Uri.encode(query)
+    }
+    return Intent(Intent.ACTION_VIEW, Uri.parse(url))
+}

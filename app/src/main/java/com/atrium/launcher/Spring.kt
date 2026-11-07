@@ -14,8 +14,10 @@ internal class Spring(
     stiffness: Float = 380f,
     damping: Float = 0.92f,
 ) {
-    var value = 0f; private set
-    var running = false; private set
+    var value = 0f
+        private set
+    var running = false
+        private set
     private var vel = 0f
     private var target = 0f
     private var last = 0L

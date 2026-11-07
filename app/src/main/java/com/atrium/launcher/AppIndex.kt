@@ -31,10 +31,14 @@ class AppIndex(private val activity: Activity) {
     private val io = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
 
-    @Volatile var apps: List<AppEntry> = emptyList(); private set
+    @Volatile
+    var apps: List<AppEntry> = emptyList()
+        private set
+
     var onChanged: (() -> Unit)? = null
     var onLaunch: (() -> Unit)? = null
     var onLaunchFailed: (() -> Unit)? = null
+    var onPinsChanged: (() -> Unit)? = null
 
     private val callback = object : LauncherApps.Callback() {
         override fun onPackageRemoved(p: String, u: UserHandle) = reload()
@@ -44,9 +48,14 @@ class AppIndex(private val activity: Activity) {
         override fun onPackagesUnavailable(p: Array<out String>, u: UserHandle, r: Boolean) = reload()
     }
 
-    init { la.registerCallback(callback, main) }
+    init {
+        la.registerCallback(callback, main)
+    }
 
-    fun destroy() { la.unregisterCallback(callback); io.shutdown() }
+    fun destroy() {
+        la.unregisterCallback(callback)
+        io.shutdown()
+    }
 
     fun reload() {
         io.execute {
@@ -61,26 +70,70 @@ class AppIndex(private val activity: Activity) {
         }
     }
 
-    /** Pinned apps shown on home. Defaults resolved by label on first run, then persisted. */
+    // ---------- Pins ----------
+
+    /** Persisted pinned components, seeded from defaults on first run. */
+    fun pinnedComponents(): List<String> {
+        val saved = prefs.getString(PINS, null) ?: return seedDefaults()
+        return saved.split('\n').filter { it.isNotEmpty() }
+    }
+
+    private fun seedDefaults(): List<String> {
+        // Never persist a seed derived from an empty index — the first app scan would
+        // otherwise leave the home screen permanently bare.
+        if (apps.isEmpty()) return emptyList()
+        val d = DEFAULTS.mapNotNull { n -> apps.firstOrNull { it.key == n }?.component?.flattenToString() }
+        prefs.edit().putString(PINS, d.joinToString("\n")).apply()
+        return d
+    }
+
+    fun isPinned(entry: AppEntry): Boolean =
+        pinnedComponents().contains(entry.component.flattenToString())
+
+    fun setPinned(entry: AppEntry, pinned: Boolean) {
+        val current = pinnedComponents().toMutableList()
+        val id = entry.component.flattenToString()
+        if (pinned) {
+            if (!current.contains(id)) current.add(id)
+        } else {
+            current.remove(id)
+        }
+        prefs.edit().putString(PINS, current.joinToString("\n")).apply()
+        onPinsChanged?.invoke()
+    }
+
+    fun togglePin(entry: AppEntry) = setPinned(entry, !isPinned(entry))
+
+    fun resetPins() {
+        prefs.edit().remove(PINS).apply()
+        seedDefaults()
+        onPinsChanged?.invoke()
+    }
+
+    /** Resolved pinned apps, in the order the user arranged them. */
     fun pinned(): List<AppEntry> {
         val all = apps
         if (all.isEmpty()) return emptyList()
-        val saved = prefs.getString(PINS, null)
-        val comps: List<String> = if (saved != null) saved.split('\n').filter { it.isNotEmpty() } else {
-            val d = DEFAULTS.mapNotNull { n -> all.firstOrNull { it.key == n }?.component?.flattenToString() }
-            prefs.edit().putString(PINS, d.joinToString("\n")).apply()
-            d
-        }
-        return comps.mapNotNull { f -> all.firstOrNull { it.component.flattenToString() == f } }
+        return pinnedComponents().mapNotNull { f -> all.firstOrNull { it.component.flattenToString() == f } }
     }
+
+    /** Unique apps, for the pin picker. */
+    fun uniqueApps(): List<AppEntry> = apps.distinctBy { it.component.flattenToString() }
+
+    // ---------- Launch ----------
 
     fun launch(e: AppEntry, from: View?) {
         val opts = if (from != null && from.width > 0)
-            ActivityOptions.makeScaleUpAnimation(from, 0, 0, from.width, from.height).toBundle() else null
+            ActivityOptions.makeScaleUpAnimation(from, 0, 0, from.width, from.height).toBundle()
+        else null
         val r = Rect()
         from?.getGlobalVisibleRect(r)
         onLaunch?.invoke()
-        try { la.startMainActivity(e.component, e.user, r, opts) } catch (_: Exception) { onLaunchFailed?.invoke() }
+        try {
+            la.startMainActivity(e.component, e.user, r, opts)
+        } catch (_: Exception) {
+            onLaunchFailed?.invoke()
+        }
     }
 
     private companion object {

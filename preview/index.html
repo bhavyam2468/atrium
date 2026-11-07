@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atrium — design preview</title>
+<style>
+  @font-face {
+    font-family: "Inter Tight";
+    src: url("../app/src/main/res/font/inter_tight.ttf") format("truetype");
+    font-weight: 100 900;
+    font-display: block;
+  }
+  @font-face {
+    font-family: "Geist Mono";
+    src: url("../app/src/main/res/font/geist_mono.ttf") format("truetype");
+    font-weight: 100 900;
+    font-display: block;
+  }
+
+  :root {
+    --ink-full: #fff;
+    --ink-high: rgba(255, 255, 255, .91);
+    --ink-mid: rgba(255, 255, 255, .67);
+    --ink-low: rgba(255, 255, 255, .49);
+    --ink-faint: rgba(255, 255, 255, .36);
+    --ink-ghost: rgba(255, 255, 255, .21);
+    --ink-hair: rgba(255, 255, 255, .08);
+    --ease: cubic-bezier(.16, 1, .3, 1);
+    --w: 392;
+    --h: 848;
+  }
+
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: #0a0a0b;
+    color: #fff;
+    font-family: "Inter Tight", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    padding: 28px 16px;
+    min-height: 100vh;
+  }
+
+  .page-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    letter-spacing: .26em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, .38);
+    text-align: center;
+  }
+  .page-label b { color: rgba(255,255,255,.72); font-weight: 500; }
+
+  .device {
+    position: relative;
+    width: calc(var(--w) * 1px);
+    height: calc(var(--h) * 1px);
+    border-radius: 44px;
+    background: #000;
+    border: 1px solid rgba(255, 255, 255, .09);
+    box-shadow: 0 40px 120px -30px #000, 0 0 0 8px rgba(255,255,255,.025);
+    overflow: hidden;
+    transform-origin: center center;
+    touch-action: none;
+  }
+  .screen {
+    position: absolute;
+    inset: 0;
+    background: #000;
+    overflow: hidden;
+    border-radius: 43px;
+    user-select: none;
+  }
+
+  /* ---------- status bar ---------- */
+  .status {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 26px;
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    letter-spacing: .08em;
+    color: rgba(255,255,255,.55);
+    z-index: 40;
+    pointer-events: none;
+  }
+  .status .right { display: flex; align-items: center; gap: 6px; }
+  .status .bars { display: flex; align-items: flex-end; gap: 2px; height: 9px; }
+  .status .bars i { width: 2px; background: rgba(255,255,255,.5); border-radius: 1px; }
+  .status .bars i:nth-child(1) { height: 3px; }
+  .status .bars i:nth-child(2) { height: 5px; }
+  .status .bars i:nth-child(3) { height: 7px; }
+  .status .bars i:nth-child(4) { height: 9px; }
+  .status .batt {
+    width: 20px; height: 9px; border: 1px solid rgba(255,255,255,.4);
+    border-radius: 2.5px; position: relative;
+  }
+  .status .batt::after {
+    content: ""; position: absolute; inset: 1.5px; right: 6px;
+    background: rgba(255,255,255,.75); border-radius: 1px;
+  }
+  .status .batt::before {
+    content: ""; position: absolute; right: -3px; top: 2.5px;
+    width: 1.5px; height: 4px; background: rgba(255,255,255,.4); border-radius: 1px;
+  }
+
+  /* ---------- home ---------- */
+  .home {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    will-change: transform, opacity;
+  }
+  .clock {
+    position: absolute;
+    top: calc(44px + 89px);
+    left: 0; right: 0;
+    text-align: center;
+    padding: 0 22px;
+  }
+  .date {
+    font-family: "Geist Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    height: 14px;
+    line-height: 14px;
+    transition: opacity .3s var(--ease);
+  }
+  .date.hidden { opacity: 0; }
+  .time {
+    margin-top: 8px;
+    font-size: 66px;
+    font-weight: 250;
+    line-height: 1.02;
+    letter-spacing: -.028em;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    color: #fff;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    will-change: transform, opacity;
+  }
+  .time .colon { color: rgba(255,255,255,.34); font-weight: 250; }
+  .time .secs {
+    font-family: "Geist Mono", monospace;
+    font-size: 15px;
+    letter-spacing: .04em;
+    color: rgba(255,255,255,.21);
+    margin-left: 6px;
+    font-weight: 400;
+  }
+  .time .suffix {
+    font-family: "Geist Mono", monospace;
+    font-size: 15px;
+    letter-spacing: .16em;
+    color: rgba(255,255,255,.36);
+    margin-left: 10px;
+    font-weight: 450;
+    display: none;
+  }
+  @keyframes tick {
+    from { opacity: .2; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .time.ticking { animation: tick .42s var(--ease); }
+
+  .home-bottom { position: absolute; left: 0; right: 0; bottom: 0; }
+  .pins {
+    position: absolute;
+    bottom: 72px;
+    left: 0; right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .pin {
+    font-size: 21.5px;
+    font-weight: 440;
+    letter-spacing: -.012em;
+    color: #fff;
+    padding: 8px 6px;
+    line-height: 1.24;
+    transition: opacity .22s var(--ease), transform .22s var(--ease);
+    cursor: pointer;
+  }
+  .pin:active { opacity: .5; transform: scale(.975); }
+  .hint {
+    position: absolute;
+    bottom: 14px;
+    left: 0; right: 0;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 23px;
+    font-weight: 400;
+    letter-spacing: .004em;
+    color: rgba(255,255,255,.3);
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .pin.enter { animation: rise .52s var(--ease) both; }
+
+  /* ---------- search ---------- */
+  .search {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    padding: 44px 0 14px;
+    opacity: 0;
+    visibility: hidden;
+    will-change: transform, opacity;
+  }
+  .cols {
+    position: absolute;
+    top: 44px; left: 0; right: 0; bottom: 72px;
+    overflow: hidden;
+  }
+  .col {
+    position: absolute;
+    left: 7%; width: 86%;
+    top: 0; bottom: 0;
+    will-change: transform, opacity;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: hidden;
+  }
+  .col-head {
+    font-family: "Geist Mono", monospace;
+    font-size: 9.5px;
+    letter-spacing: .24em;
+    text-transform: uppercase;
+    color: var(--ink-low);
+    text-align: center;
+    padding-bottom: 8px;
+    flex: none;
+  }
+  .col-body {
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 40px);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: 0;
+  }
+  .row {
+    font-size: 20px;
+    font-weight: 430;
+    letter-spacing: -.008em;
+    text-align: center;
+    padding: 6px 8px;
+    line-height: 1.24;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    transition: opacity .18s var(--ease), transform .18s var(--ease);
+    flex: none;
+  }
+  .row:active { opacity: .5; transform: scale(.975); }
+  .row .sub {
+    font-family: "Geist Mono", monospace;
+    font-size: 56%;
+    color: var(--ink-faint);
+    letter-spacing: .02em;
+    margin-left: .55em;
+  }
+  .row.enter { animation: rowin .3s var(--ease) both; }
+  @keyframes rowin {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .inputrow {
+    position: absolute;
+    bottom: 14px; left: 0; right: 0;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 6;
+  }
+  .field {
+    font-size: 23px;
+    font-weight: 400;
+    letter-spacing: .004em;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    max-width: 88%;
+    min-height: 1em;
+  }
+  .field .caret {
+    width: 2px; height: 1.05em;
+    background: #fff;
+    margin-left: 1px;
+    animation: blink 1.06s steps(1, end) infinite;
+  }
+  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  .field.empty .caret { display: none; }
+  .field.empty::after {
+    content: attr(data-hint);
+    color: rgba(255,255,255,.3);
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+  .field.empty { position: relative; }
+
+  /* ---------- settings ---------- */
+  .settings {
+    position: absolute;
+    left: 7%; width: 86%;
+    top: 44px; bottom: 72px;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    visibility: hidden;
+    will-change: transform, opacity;
+  }
+  .set-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 4px 0 10px;
+    cursor: pointer;
+  }
+  .set-title {
+    font-family: "Geist Mono", monospace;
+    font-size: 9.5px;
+    letter-spacing: .24em;
+    text-transform: uppercase;
+    color: var(--ink-low);
+    transition: color .25s var(--ease);
+  }
+  .set-head.back .set-title { color: var(--ink-mid); }
+  .backmark {
+    width: 8px; height: 8px;
+    border-left: 1.1px solid var(--ink-mid);
+    border-bottom: 1.1px solid var(--ink-mid);
+    transform: rotate(45deg);
+    display: none;
+    margin-right: 2px;
+  }
+  .set-head.back .backmark { display: block; }
+  .set-scroll {
+    flex: 1;
+    touch-action: pan-y;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+    padding-bottom: 30px;
+  }
+  .set-scroll::-webkit-scrollbar { display: none; }
+
+  .sec-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 22px 20px 6px;
+    cursor: pointer;
+  }
+  .sec-title {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--ink-mid);
+    transition: color .25s var(--ease);
+    white-space: nowrap;
+  }
+  .sec-head.closed .sec-title { color: var(--ink-low); }
+  .sec-line { flex: 1; height: 1px; background: var(--ink-hair); }
+  .chev {
+    width: 8px; height: 8px;
+    border-right: 1.1px solid var(--ink-low);
+    border-bottom: 1.1px solid var(--ink-low);
+    transform: rotate(45deg) translate(-1px, -1px);
+    transition: transform .34s var(--ease);
+    flex: none;
+  }
+  .sec-head.closed .chev { transform: rotate(-45deg) translate(-1px, 1px); }
+
+  .sec-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows .36s var(--ease);
+  }
+  .sec-body.closed { grid-template-rows: 0fr; }
+  .sec-inner { overflow: hidden; min-height: 0; }
+
+  .srow {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    cursor: pointer;
+    transition: opacity .18s var(--ease);
+  }
+  .srow:active { opacity: .5; }
+  .srow.static { cursor: default; }
+  .srow.static:active { opacity: 1; }
+  .stext { flex: 1; min-width: 0; }
+  .stitle {
+    font-size: 16px;
+    font-weight: 430;
+    color: var(--ink-high);
+    line-height: 1.28;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sdesc {
+    font-size: 12.5px;
+    font-weight: 380;
+    color: var(--ink-faint);
+    line-height: 1.32;
+    margin-top: 3px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .sval {
+    font-family: "Geist Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-mid);
+    white-space: nowrap;
+    padding-left: 10px;
+    transition: opacity .2s var(--ease), transform .2s var(--ease);
+  }
+  .sval.flash { animation: valflash .24s var(--ease); }
+  @keyframes valflash {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .sval.dim { color: var(--ink-faint); }
+  .divider {
+    height: 1px;
+    background: var(--ink-hair);
+    margin: 0 20px;
+  }
+  .goline {
+    width: 8px; height: 8px;
+    border-right: 1.1px solid var(--ink-ghost);
+    border-bottom: 1.1px solid var(--ink-ghost);
+    transform: rotate(-45deg);
+    flex: none;
+  }
+
+  /* switch */
+  .sw {
+    width: 34px; height: 19px;
+    border-radius: 10px;
+    position: relative;
+    flex: none;
+    border: 1.1px solid rgba(255,255,255,.22);
+    background: rgba(255,255,255,.05);
+    transition: background .26s var(--ease), border-color .26s var(--ease);
+  }
+  .sw::after {
+    content: "";
+    position: absolute;
+    width: 10.4px; height: 10.4px;
+    border-radius: 50%;
+    top: 50%; left: 3.2px;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,.36);
+    transition: transform .26s var(--ease), background .26s var(--ease);
+  }
+  .sw.on { background: #fff; border-color: #fff; }
+  .sw.on::after { transform: translate(14.6px, -50%); background: #000; }
+
+  .intro {
+    padding: 14px 20px 4px;
+    font-size: 13px;
+    font-weight: 380;
+    color: var(--ink-faint);
+    line-height: 1.4;
+  }
+  .empty {
+    padding: 30px 20px;
+  }
+  .empty .t {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--ink-low);
+  }
+  .empty .d { font-size: 14px; color: var(--ink-faint); margin-top: 7px; }
+
+  /* ---------- keyboard ---------- */
+  .kbd {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 300px;
+    background: #0b0b0c;
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding: 12px 6px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    z-index: 30;
+    transform: translateY(100%);
+    transition: transform .34s var(--ease);
+    pointer-events: none;
+  }
+  .kbd.show { transform: translateY(0); }
+  .krow { display: flex; gap: 6px; justify-content: center; }
+  .key {
+    height: 42px;
+    flex: 1;
+    max-width: 34px;
+    border-radius: 5px;
+    background: rgba(255,255,255,.075);
+  }
+  .key.wide { max-width: none; flex: 4.2; }
+  .key.half { max-width: 52px; }
+  .krow.special { padding-top: 4px; }
+
+  /* ---------- outside controls ---------- */
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .ctl {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.6);
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 999px;
+    padding: 9px 16px;
+    cursor: pointer;
+    transition: all .2s var(--ease);
+  }
+  .ctl:hover { color: #fff; border-color: rgba(255,255,255,.32); }
+  .ctl.active { background: #fff; color: #000; border-color: #fff; }
+  .legend {
+    font-family: "Geist Mono", monospace;
+    font-size: 9.5px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.26);
+    text-align: center;
+    line-height: 1.9;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-label"><b>Atrium</b> &nbsp;·&nbsp; design preview &nbsp;·&nbsp; 392 × 848</div>
+
+<div class="device" id="device">
+  <div class="screen" id="screen">
+    <div class="status">
+      <span id="statusTime">9:41</span>
+      <span class="right">
+        <span class="bars"><i></i><i></i><i></i><i></i></span>
+        <span class="batt"></span>
+      </span>
+    </div>
+
+    <!-- home -->
+    <div class="home" id="home">
+      <div class="clock">
+        <div class="date" id="date">FRIDAY, 7 NOVEMBER</div>
+        <div class="time" id="time">
+          <span id="hh">09</span><span class="colon">:</span><span id="mm">41</span>
+          <span class="secs" id="secs" style="display:none"></span>
+          <span class="suffix" id="suffix"></span>
+        </div>
+      </div>
+      <div class="home-bottom">
+        <div class="pins" id="pins"></div>
+        <div class="hint">search</div>
+      </div>
+    </div>
+
+    <!-- search -->
+    <div class="search" id="search">
+      <div class="cols" id="cols">
+        <div class="col" id="colSettings" style="opacity:0;visibility:hidden"></div>
+        <div class="col" id="colApps"></div>
+        <div class="col" id="colContacts"></div>
+        <div class="col" id="colWeb"></div>
+      </div>
+      <div class="inputrow"><div class="field empty" id="field" data-hint="search"><span id="qtext"></span><span class="caret"></span></div></div>
+    </div>
+
+    <!-- settings overlay (lives in the pager too) -->
+    <div class="col settings" id="settings" style="opacity:0;visibility:hidden">
+      <div class="set-head" id="setHead">
+        <span class="backmark"></span>
+        <span class="set-title" id="setTitle">SETTINGS</span>
+      </div>
+      <div class="set-scroll" id="setScroll"></div>
+    </div>
+
+    <!-- keyboard -->
+    <div class="kbd" id="kbd"></div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="ctl" data-go="home">Home</button>
+  <button class="ctl" data-go="search">Search</button>
+  <button class="ctl" data-go="settings">Settings</button>
+</div>
+<div class="legend">
+  drag up to search &nbsp;·&nbsp; drag sideways for columns &nbsp;·&nbsp; type to filter &nbsp;·&nbsp; ⌫ clears
+</div>
+
+<script>
+(() => {
+  const W = 392, H = 848;
+  const screen = document.getElementById('screen');
+  const home = document.getElementById('home');
+  const searchEl = document.getElementById('search');
+  const colsEl = document.getElementById('cols');
+  const settingsEl = document.getElementById('settings');
+  const kbd = document.getElementById('kbd');
+  const field = document.getElementById('field');
+  const qtext = document.getElementById('qtext');
+
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const smooth = (a, b, x) => {
+    const t = clamp((x - a) / (b - a), 0, 1);
+    return t * t * (3 - 2 * t);
+  };
+
+  /* ---------- spring, same integrator as Spring.kt ---------- */
+  class Spring {
+    constructor(value = 0, stiffness = 380, damping = 0.9) {
+      this.value = value;
+      this.target = value;
+      this.vel = 0;
+      this.k = stiffness;
+      this.c = 2 * Math.sqrt(stiffness) * damping;
+      this.running = false;
+    }
+    snap(v) { this.value = v; this.target = v; this.vel = 0; this.running = false; }
+    to(t, velocity = 0) {
+      this.target = t;
+      this.vel = velocity;
+      this.running = true;
+    }
+    set(v) { this.value = v; this.running = false; }
+    step(dt) {
+      if (!this.running) return false;
+      const h = Math.min(dt, 0.032) / 2;
+      for (let i = 0; i < 2; i++) {
+        this.vel += (-this.k * (this.value - this.target) - this.c * this.vel) * h;
+        this.value += this.vel * h;
+      }
+      if (Math.abs(this.value - this.target) < 0.0004 && Math.abs(this.vel) < 0.01) {
+        this.value = this.target;
+        this.vel = 0;
+        this.running = false;
+      }
+      return true;
+    }
+  }
+
+  /* ---------- data ---------- */
+  const APPS = [
+    'Adobe Lightroom', 'Airbnb', 'Amazon', 'Apple Music', 'Arc', 'Audible',
+    'Calculator', 'Calendar', 'Camera', 'Chrome', 'Clock', 'Discord', 'Drive',
+    'Dropbox', 'Figma', 'Files', 'Fit', 'Gmail', 'Google Maps', 'Instagram',
+    'Keep', 'Linear', 'LinkedIn', 'Messages', 'Netflix', 'Notes', 'Notion',
+    'PhonePe', 'Photos', 'Podcasts', 'Reddit', 'Slack', 'Spotify', 'Steam',
+    'Telegram', 'Tidal', 'Todoist', 'Uber', 'VS Code', 'Wallet', 'WhatsApp',
+    'YouTube', 'Zoom'
+  ];
+  const CONTACTS = [
+    ['Amara Osei', '+91 98140 22118'],
+    ['Arjun Mehta', '+91 98765 43210'],
+    ['Devika Rao', '+91 90000 11345'],
+    ['Ishaan Kapoor', '+91 99870 22411'],
+    ['Meera Nair', '+91 98450 77320']
+  ];
+
+  const state = {
+    pinned: ['YouTube', 'PhonePe', 'Spotify', 'WhatsApp'],
+    query: '',
+    // settings
+    showDate: true,
+    showSeconds: false,
+    clockFormat: '24-hour',
+    density: 'Comfortable',
+    hideStatus: false,
+    hideNav: false,
+    contacts: true,
+    engine: 'Google',
+    speed: 'Standard',
+    stagger: true,
+    blur: true,
+    blurDepth: 'Medium',
+    haptics: true
+  };
+
+  /* ---------- clock ---------- */
+  const dateEl = document.getElementById('date');
+  const hh = document.getElementById('hh');
+  const mm = document.getElementById('mm');
+  const secs = document.getElementById('secs');
+  const suffix = document.getElementById('suffix');
+  const timeEl = document.getElementById('time');
+  const statusTime = document.getElementById('statusTime');
+
+  let lastMinute = null;
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function tickClock() {
+    const now = new Date();
+    const use24 = state.clockFormat !== '12-hour';
+    const h24 = now.getHours();
+    const h = use24 ? pad(h24) : String(((h24 + 11) % 12) + 1);
+    const m = pad(now.getMinutes());
+    const key = h + ':' + m;
+    if (key !== lastMinute) {
+      const first = lastMinute !== null;
+      lastMinute = key;
+      hh.textContent = h;
+      mm.textContent = m;
+      if (first && state.speed !== 'Snappy') {
+        timeEl.classList.remove('ticking');
+        void timeEl.offsetWidth;
+        timeEl.classList.add('ticking');
+      }
+    }
+    secs.textContent = ':' + pad(now.getSeconds());
+    suffix.textContent = now.getHours() >= 12 ? 'PM' : 'AM';
+    dateEl.textContent = (
+      now.toLocaleDateString(undefined, { weekday: 'long' }) + ', ' + now.getDate() + ' ' +
+      now.toLocaleDateString(undefined, { month: 'long' })
+    ).toUpperCase();
+    statusTime.textContent = use24 ? h + ':' + m : h + ':' + m;
+
+    secs.style.display = state.showSeconds ? 'inline' : 'none';
+    suffix.style.display = use24 ? 'none' : 'inline';
+    dateEl.classList.toggle('hidden', !state.showDate);
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  /* ---------- home pins ---------- */
+  const pinsEl = document.getElementById('pins');
+  function renderPins(animate) {
+    pinsEl.innerHTML = '';
+    const pinned = state.pinned.filter(a => APPS.includes(a));
+    pinned.slice(0, 8).forEach((name, i) => {
+      const el = document.createElement('div');
+      el.className = 'pin' + (animate ? ' enter' : '');
+      el.textContent = name;
+      if (animate) el.style.animationDelay = (90 + i * 40) + 'ms';
+      pinsEl.appendChild(el);
+    });
+  }
+  renderPins(true);
+
+  /* ---------- search results ---------- */
+  const COLS = [
+    { id: 'apps', el: document.getElementById('colApps'), title: 'APPS' },
+    { id: 'contacts', el: document.getElementById('colContacts'), title: 'CONTACTS' },
+    { id: 'web', el: document.getElementById('colWeb'), title: 'WEB' }
+  ];
+
+  const PAIRS = [
+    ['a', 'b'], ['c', 'd'], ['e', 'f'], ['g', 'h'], ['i', 'j'], ['k', 'l'],
+    ['m', 'n'], ['o', 'p'], ['q', 'r'], ['s', 't'], ['u', 'v'], ['w', 'x']
+  ];
+
+  function fuzzy(query, text) {
+    if (!query) return 0;
+    const q = query.toLowerCase(), t = text.toLowerCase();
+    let qi = 0, score = 0, streak = 0;
+    for (let i = 0; i < t.length && qi < q.length; i++) {
+      if (t[i] === q[qi]) {
+        score += 10 + streak * 4;
+        if (i === 0 || t[i - 1] === ' ') score += 12;
+        streak++;
+        qi++;
+      } else {
+        streak = 0;
+      }
+    }
+    return qi === q.length ? score : null;
+  }
+
+  function results() {
+    const q = state.query.trim();
+    const apps = APPS.map(name => ({ name, score: fuzzy(q, name) }))
+      .filter(r => r.score !== null)
+      .sort((a, b) => q ? (b.score - a.score || a.name.localeCompare(b.name)) : a.name.localeCompare(b.name))
+      .slice(0, 60);
+
+    const contacts = state.contacts
+      ? CONTACTS.map(([name, num]) => ({ name, num, score: fuzzy(q, name) }))
+          .filter(r => r.score !== null)
+          .sort((a, b) => q ? b.score - a.score : a.name.localeCompare(b.name))
+      : [];
+
+    const engine = state.engine;
+    const web = [{
+      name: q ? `Search “${q}”` : 'Search the web',
+      sub: engine
+    }];
+
+    return { apps, contacts, web };
+  }
+
+  function renderCols(anime) {
+    const r = results();
+    COLS.forEach(col => {
+      col.el.innerHTML = '';
+      const head = document.createElement('div');
+      head.className = 'col-head';
+      head.textContent = col.title;
+      const body = document.createElement('div');
+      body.className = 'col-body';
+
+      let rows = [];
+      if (col.id === 'apps') {
+        rows = r.apps.map(a => ({ name: a.name }));
+      } else if (col.id === 'contacts') {
+        if (!r.contacts.length) { col.el.style.display = 'none'; return; }
+        rows = r.contacts.map(c => ({ name: c.name, sub: c.num }));
+      } else {
+        rows = r.web;
+      }
+      col.el.style.display = '';
+
+      // index 0 must land at the bottom
+      [...rows].reverse().forEach((row, idx, arr) => {
+        const el = document.createElement('div');
+        el.className = 'row' + (anime ? ' enter' : '');
+        el.innerHTML = row.sub
+          ? escapeHtml(row.name) + '<span class="sub">' + escapeHtml(row.sub) + '</span>'
+          : escapeHtml(row.name);
+        if (anime) el.style.animationDelay = Math.min(arr.length - 1 - idx, 12) * 16 + 'ms';
+        body.appendChild(el);
+      });
+      col.el.appendChild(head);
+      col.el.appendChild(body);
+    });
+    layoutPager();
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  /* ---------- settings tree ---------- */
+  const SETTINGS = [
+    {
+      id: 'clock', title: 'CLOCK & DATE',
+      rows: [
+        { kind: 'choice', title: 'Time Format', desc: 'Follow the system, or pin a 24 or 12 hour clock',
+          get: () => state.clockFormat, options: ['Automatic', '24-hour', '12-hour'], set: v => state.clockFormat = v },
+        { kind: 'toggle', title: 'Show Date', desc: 'Weekday and date, set in small caps above the time',
+          get: () => state.showDate, set: v => state.showDate = v },
+        { kind: 'toggle', title: 'Show Seconds', desc: 'A live seconds counter beside the time',
+          get: () => state.showSeconds, set: v => state.showSeconds = v }
+      ]
+    },
+    {
+      id: 'home', title: 'HOME SCREEN',
+      rows: [
+        { kind: 'page', title: 'Pinned Apps', live: () => `${state.pinned.length} of ${APPS.length} apps on the home screen` },
+        { kind: 'action', title: 'Restore Default Pins', desc: 'Return to the apps Atrium suggests on first run',
+          verb: 'RESTORE', run: () => { state.pinned = ['YouTube', 'PhonePe', 'Spotify', 'WhatsApp']; renderPins(false); } }
+      ]
+    },
+    {
+      id: 'display', title: 'DISPLAY',
+      rows: [
+        { kind: 'toggle', title: 'Hide Status Bar', desc: 'Remove the clock, battery and notification icons above',
+          get: () => state.hideStatus, set: v => state.hideStatus = v },
+        { kind: 'toggle', title: 'Hide Navigation Bar', desc: 'Swipe up from the bottom edge to reveal it again',
+          get: () => state.hideNav, set: v => state.hideNav = v },
+        { kind: 'choice', title: 'Row Density', desc: 'How much air sits between lines of text',
+          get: () => state.density, options: ['Comfortable', 'Compact'], set: v => state.density = v }
+      ]
+    },
+    {
+      id: 'search', title: 'SEARCH',
+      rows: [
+        { kind: 'toggle', title: 'Suggest Contacts', desc: 'Match names and numbers while typing, tap to dial',
+          get: () => state.contacts, set: v => { state.contacts = v; renderCols(false); } },
+        { kind: 'choice', title: 'Web Engine', desc: 'Where the web column sends your query',
+          get: () => state.engine, options: ['Google', 'DuckDuckGo', 'Brave Search'],
+          set: v => { state.engine = v; renderCols(false); } }
+      ]
+    },
+    {
+      id: 'motion', title: 'MOTION & TOUCH',
+      rows: [
+        { kind: 'choice', title: 'Motion Speed', desc: 'Pace of every spring, fade and slide in the launcher',
+          get: () => state.speed, options: ['Snappy', 'Quick', 'Standard', 'Calm', 'Slow'], set: v => state.speed = v },
+        { kind: 'toggle', title: 'Staggered Reveal', desc: 'Rows arrive one after another instead of all at once',
+          get: () => state.stagger, set: v => state.stagger = v },
+        { kind: 'toggle', title: 'Blur to Focus', desc: 'Defocus the screen while an app opens, then resolve it',
+          get: () => state.blur, set: v => state.blur = v },
+        { kind: 'choice', title: 'Blur Depth', desc: 'How far out of focus the screen travels',
+          get: () => state.blurDepth, options: ['Subtle', 'Medium', 'Deep'], set: v => state.blurDepth = v },
+        { kind: 'toggle', title: 'Haptic Feedback', desc: 'A small tick when you press, toggle or snap columns',
+          get: () => state.haptics, set: v => state.haptics = v }
+      ]
+    },
+    {
+      id: 'system', title: 'SYSTEM',
+      rows: [
+        { kind: 'action', title: 'Default Launcher', desc: 'Hand the home button to Atrium, system-wide', verb: 'OPEN' },
+        { kind: 'action', title: 'Contacts Access', desc: 'Granted. Review it in Android settings', verb: 'REVIEW' },
+        { kind: 'action', title: 'Atrium App Info', desc: 'Battery, storage and every system permission', verb: 'OPEN' }
+      ]
+    },
+    {
+      id: 'about', title: 'ABOUT',
+      rows: [
+        { kind: 'info', title: 'Version', value: '1.1' },
+        { kind: 'info', title: 'Typefaces', desc: 'Inter Tight and Geist Mono, SIL Open Font License 1.1', value: 'OFL 1.1' },
+        { kind: 'info', title: 'Search Algorithm', desc: "A zero-allocation port of fzf v2's Smith-Waterman scoring", value: 'fzf v2' },
+        { kind: 'info', title: 'Motion', desc: 'Damped springs stepped on every display frame', value: 'CHOREO' }
+      ]
+    }
+  ];
+
+  const setScroll = document.getElementById('setScroll');
+  const setHead = document.getElementById('setHead');
+  const setTitle = document.getElementById('setTitle');
+  let collapsed = new Set();
+  let page = null; // 'pinned' or null
+
+  function valueCell(text, dim) {
+    const el = document.createElement('div');
+    el.className = 'sval' + (dim ? ' dim' : '');
+    el.textContent = text;
+    return el;
+  }
+
+  function buildRow(row) {
+    const el = document.createElement('div');
+    el.className = 'srow';
+    const text = document.createElement('div');
+    text.className = 'stext';
+    const t = document.createElement('div');
+    t.className = 'stitle';
+    t.textContent = row.title;
+    text.appendChild(t);
+    const desc = row.live ? row.live() : row.desc;
+    if (desc) {
+      const d = document.createElement('div');
+      d.className = 'sdesc';
+      d.textContent = desc;
+      text.appendChild(d);
+    }
+    el.appendChild(text);
+
+    if (row.kind === 'toggle') {
+      const sw = document.createElement('div');
+      sw.className = 'sw' + (row.get() ? ' on' : '');
+      el.appendChild(sw);
+      el.onclick = () => {
+        const next = !row.get();
+        row.set(next);
+        sw.classList.toggle('on', next);
+        tick();
+      };
+    } else if (row.kind === 'choice') {
+      const v = valueCell(row.get());
+      el.appendChild(v);
+      el.onclick = () => {
+        const opts = row.options;
+        const at = opts.indexOf(row.get());
+        const next = opts[(at + 1) % opts.length];
+        row.set(next);
+        v.textContent = row.get().toUpperCase();
+        v.classList.remove('flash');
+        void v.offsetWidth;
+        v.classList.add('flash');
+        tick();
+      };
+    } else if (row.kind === 'action') {
+      el.appendChild(valueCell(row.verb || 'OPEN', true));
+      el.onclick = () => { if (row.run) { row.run(); renderSettings(false); } tick(); };
+    } else if (row.kind === 'info') {
+      el.appendChild(valueCell(row.value, true));
+      el.classList.add('static');
+    } else if (row.kind === 'page') {
+      const go = document.createElement('div');
+      go.className = 'goline';
+      el.appendChild(go);
+      el.onclick = () => { page = 'pinned'; renderSettings(true); };
+    }
+    return el;
+  }
+
+  function sectionBody(title, rows) {
+    const body = document.createElement('div');
+    body.className = 'sec-body';
+    const inner = document.createElement('div');
+    inner.className = 'sec-inner';
+    rows.forEach((row, i) => {
+      if (i > 0) {
+        const d = document.createElement('div');
+        d.className = 'divider';
+        inner.appendChild(d);
+      }
+      inner.appendChild(buildRow(row));
+    });
+    body.appendChild(inner);
+    return body;
+  }
+
+  function renderSettings(glide) {
+    setScroll.innerHTML = '';
+    const isPage = page === 'pinned';
+    setHead.classList.toggle('back', isPage);
+    setTitle.textContent = isPage ? 'PINNED APPS' : 'SETTINGS';
+
+    if (isPage) {
+      const intro = document.createElement('div');
+      intro.className = 'intro';
+      intro.textContent = 'Choose the apps that live on your home screen.';
+      setScroll.appendChild(intro);
+      const rows = APPS.map(name => ({
+        kind: 'toggle', title: name,
+        get: () => state.pinned.includes(name),
+        set: v => {
+          state.pinned = v
+            ? [...state.pinned, name]
+            : state.pinned.filter(a => a !== name);
+          renderPins(false);
+        }
+      }));
+      setScroll.appendChild(sectionBody('installed', rows));
+    } else {
+      SETTINGS.forEach(sec => {
+        const head = document.createElement('div');
+        head.className = 'sec-head' + (collapsed.has(sec.id) ? ' closed' : '');
+        const t = document.createElement('div');
+        t.className = 'sec-title';
+        t.textContent = sec.title;
+        const line = document.createElement('div');
+        line.className = 'sec-line';
+        const chev = document.createElement('div');
+        chev.className = 'chev';
+        head.append(t, line, chev);
+
+        const body = sectionBody(sec.title, sec.rows);
+        if (collapsed.has(sec.id)) body.classList.add('closed');
+
+        head.onclick = () => {
+          const closed = !collapsed.has(sec.id);
+          if (closed) collapsed.add(sec.id); else collapsed.delete(sec.id);
+          head.classList.toggle('closed', closed);
+          body.classList.toggle('closed', closed);
+          tick();
+        };
+        setScroll.append(head, body);
+      });
+    }
+
+    if (glide) {
+      setScroll.style.opacity = '0';
+      setScroll.style.transform = 'translateY(16px)';
+      setScroll.style.transition = 'none';
+      requestAnimationFrame(() => {
+        setScroll.style.transition = 'opacity .3s var(--ease), transform .3s var(--ease)';
+        setScroll.style.opacity = '1';
+        setScroll.style.transform = 'translateY(0)';
+      });
+    }
+    setScroll.scrollTop = 0;
+  }
+
+  setHead.onclick = () => {
+    if (page) { page = null; renderSettings(true); tick(); }
+  };
+
+  function tick() {
+    if (navigator.vibrate && state.haptics) navigator.vibrate(4);
+  }
+
+  renderSettings(false);
+
+  /* ---------- pager ---------- */
+  const openSpring = new Spring(0, 380, 0.92);
+  const pageSpring = new Spring(0, 300, 0.78);
+
+  let focus = 0;         // index into COLS, or -1 for settings
+  let dragOffset = 0;    // slots, while dragging horizontally
+  let open = false;
+
+  function isSettings() { return focus === -1; }
+
+  function visibleCols() {
+    return COLS.filter(c => c.el.style.display !== 'none');
+  }
+
+  // settings always sits at slot -1; visible result columns follow at 0, 1, 2…
+  function colOffsets() {
+    const out = { settings: -1 - pageSpring.value + dragOffset };
+    visibleCols().forEach((c, i) => {
+      out[c.id] = i - pageSpring.value + dragOffset;
+    });
+    return out;
+  }
+
+  function layoutPager() {
+    const off = colOffsets();
+    if (focus >= visibleCols().length) focus = 0;
+
+    const apply = (el, p, baseVisible) => {
+      const a = Math.min(Math.abs(p), 1);
+      const soft = a * a * (3 - 2 * a);
+      el.style.transform = `translateX(${p * W}px) translateY(${a * 14}px) scale(${1 - 0.06 * soft})`;
+      el.style.opacity = String(baseVisible ? (1 - soft) : 0);
+      el.style.visibility = (baseVisible && 1 - soft > 0.02) ? 'visible' : 'hidden';
+    };
+
+    apply(settingsEl, off.settings, true);
+    for (const c of COLS) {
+      const visible = c.el.style.display !== 'none';
+      apply(c.el, off[c.id] === undefined ? 50 : off[c.id], visible);
+    }
+  }
+
+  function layoutOpen(p) {
+    const homeFade = 1 - smooth(0, 0.55, p);
+    home.style.opacity = String(homeFade);
+    home.style.transform = `translateY(${-p * 30}px) scale(${1 - 0.035 * p})`;
+    home.style.visibility = homeFade <= 0.01 ? 'hidden' : 'visible';
+
+    const fade = smooth(0.1, 0.72, p);
+    searchEl.style.opacity = String(fade);
+    searchEl.style.visibility = fade <= 0.004 ? 'hidden' : 'visible';
+    settingsEl.style.pointerEvents = fade > 0.5 ? 'auto' : 'none';
+
+    const imeShift = p > 0.5 ? -300 * smooth(0.35, 1, p) : 0;
+    searchEl.style.transform = `translateY(${-(1 - p) * 58 + imeShift}px)`;
+  }
+
+  function applyAll() {
+    layoutOpen(openSpring.value);
+    layoutPager();
+    const imeOpen = openSpring.value > 0.5 && !isSettings();
+    kbd.classList.toggle('show', imeOpen);
+  }
+
+  /* ---------- input ---------- */
+  function setQuery(q) {
+    state.query = q;
+    qtext.textContent = q;
+    field.classList.toggle('empty', q.length === 0);
+    renderCols(state.stagger);
+  }
+
+  /* ---------- gestures ---------- */
+  let dragging = null;
+  let startX = null, startY = 0, startOffset = 0, startP = 0;
+  let lastT = 0, lastP = 0, lastOffset = 0, hVel = 0;
+
+  function onDown(e) {
+    if (e.target.closest('#setScroll') || e.target.closest('.col.settings')) {
+      // vertical scrolling inside settings is handled natively
+    }
+    dragging = null;
+    startX = e.clientX;
+    startY = e.clientY;
+    startOffset = dragOffset;
+    startP = openSpring.value;
+    lastT = performance.now();
+    lastP = openSpring.value;
+    lastOffset = dragOffset;
+    hVel = 0;
+  }
+
+  function onMove(e) {
+    if (startX === null) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    const now = performance.now();
+    const dt = Math.max(1, now - lastT) / 1000;
+
+    if (!dragging) {
+      if (!open && dy > 8 && dy > Math.abs(dx) * 1.2) dragging = 'v';
+      else if (open && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) dragging = 'h';
+      else if (open && dy > 8 && Math.abs(dy) > Math.abs(dx) * 1.2) dragging = 'v';
+    }
+    if (dragging === 'v') {
+      const range = Math.min(H * 0.3, 260);
+      let raw = startP + dy / range;
+      raw = raw > 1 ? 1 + (raw - 1) * 0.2 : Math.max(0, raw);
+      openSpring.snap(raw);
+      openSpring.running = false;
+      openSpring.vel = (openSpring.value - lastP) / dt;
+      layoutOpen(openSpring.value);
+    } else if (dragging === 'h') {
+      dragOffset = startOffset + dx / W;
+      const hi = -(-1 - pageSpring.value);
+      const lo = -(COLS.length - 1 - pageSpring.value);
+      if (dragOffset > hi) dragOffset = hi + (dragOffset - hi) * 0.25;
+      if (dragOffset < lo) dragOffset = lo + (dragOffset - lo) * 0.25;
+      layoutPager();
+      hVel = (dragOffset - lastOffset) / dt;
+      lastOffset = dragOffset;
+    }
+    lastT = now;
+    lastP = openSpring.value;
+  }
+
+  function onUp() {
+    if (dragging === 'v') {
+      const v = openSpring.vel;
+      let go;
+      if (v > 1.5) go = 1; else if (v < -1.5) go = 0;
+      else go = openSpring.value > 0.5 ? 1 : 0;
+      open = go === 1;
+      openSpring.to(go, v);
+    } else if (dragging === 'h') {
+      // candidate slots: settings at -1, visible columns 0..n-1
+      const candidates = [-1, ...visibleCols().map((c, i) => i)];
+      let best = candidates[0];
+      let bestDist = Infinity;
+      for (const slot of candidates) {
+        const p = slot - pageSpring.value + dragOffset;
+        const d = Math.abs(p);
+        if (d < bestDist) { bestDist = d; best = slot; }
+      }
+      const carry = dragOffset;
+      dragOffset = 0;
+      pageSpring.snap(pageSpring.value - carry);
+      focus = best;
+      tuneKeyboard();
+      pageSpring.to(best, clamp(hVel, -8, 8));
+      tick();
+    }
+    dragging = null;
+    startX = null;
+  }
+
+  function tuneKeyboard() {
+    // paging into settings releases the keyboard; going back restores it
+    if (isSettings()) kbd.classList.remove('show');
+    else if (openSpring.value > 0.5 && state.query.length === 0) kbd.classList.add('show');
+  }
+
+  const device = document.getElementById('device');
+  device.addEventListener('pointerdown', e => {
+    if (e.target.closest('.ctl')) return;
+    device.setPointerCapture(e.pointerId);
+    onDown(e);
+  });
+  device.addEventListener('pointermove', e => {
+    if (startX === null) return;
+    onMove(e);
+    if (dragging) e.preventDefault();
+  });
+  device.addEventListener('pointerup', onUp);
+  device.addEventListener('pointercancel', onUp);
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Backspace') {
+      setQuery(state.query.slice(0, -1));
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      if (page) { page = null; renderSettings(true); }
+      else closeAll();
+    } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
+      goTo('search');
+      setQuery(state.query + e.key);
+    } else if (e.key === 'ArrowRight' && open) {
+      const max = visibleCols().length - 1;
+      focus = clamp(focus === -1 ? 0 : focus + 1, -1, max);
+      tuneKeyboard();
+      pageSpring.to(focus, 4);
+    } else if (e.key === 'ArrowLeft' && open) {
+      const max = visibleCols().length - 1;
+      focus = clamp(focus === -1 ? -1 : focus - 1, -1, max);
+      tuneKeyboard();
+      pageSpring.to(focus, -4);
+    }
+  });
+
+  /* ---------- controls ---------- */
+  function goTo(where) {
+    if (where === 'home') {
+      open = false;
+      openSpring.to(0);
+      pageSpring.to(0);
+      focus = 0;
+      kbd.classList.remove('show');
+    } else if (where === 'search') {
+      open = true;
+      openSpring.to(1);
+      pageSpring.to(0);
+      focus = 0;
+      page = null;
+      renderSettings(false);
+      if (!state.query) kbd.classList.add('show');
+    } else if (where === 'settings') {
+      open = true;
+      openSpring.to(1);
+      pageSpring.to(-1);
+      focus = -1;
+      page = null;
+      renderSettings(false);
+      kbd.classList.remove('show');
+    }
+    setQuery(state.query);
+  }
+  function closeAll() {
+    open = false;
+    openSpring.to(0);
+  }
+
+  document.querySelectorAll('.ctl').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.ctl').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      goTo(btn.dataset.go);
+    };
+  });
+  document.querySelector('.ctl[data-go="home"]').classList.add('active');
+
+  /* ---------- keyboard art ---------- */
+  (function buildKeyboard() {
+    const widths = [10, 9, 7];
+    widths.forEach((n, ri) => {
+      const row = document.createElement('div');
+      row.className = 'krow';
+      for (let i = 0; i < n; i++) {
+        const k = document.createElement('div');
+        k.className = 'key';
+        row.appendChild(k);
+      }
+      kbd.appendChild(row);
+    });
+    const special = document.createElement('div');
+    special.className = 'krow special';
+    ['half', 'wide', 'half'].forEach(c => {
+      const k = document.createElement('div');
+      k.className = 'key ' + c;
+      special.appendChild(k);
+    });
+    kbd.appendChild(special);
+  })();
+
+  /* ---------- loop ---------- */
+  let last = performance.now();
+  function frame(now) {
+    const dt = (now - last) / 1000;
+    last = now;
+    let changed = false;
+    if (openSpring.step(dt)) changed = true;
+    if (pageSpring.step(dt)) changed = true;
+    if (changed) applyAll();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  /* ---------- fit ---------- */
+  function fit() {
+    const availH = window.innerHeight - 190;
+    const availW = window.innerWidth - 48;
+    const s = Math.min(1, availH / H, availW / W);
+    device.style.transform = `scale(${s.toFixed(3)})`;
+    device.style.margin = `${(H * (s - 1)) / 2}px ${(W * (s - 1)) / 2}px`;
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  /* ---------- initial paint ---------- */
+  renderCols(false);
+  layoutOpen(0);
+  layoutPager();
+})();
+</script>
+</body>
+</html>

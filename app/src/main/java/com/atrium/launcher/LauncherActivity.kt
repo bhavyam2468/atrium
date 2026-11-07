@@ -2,7 +2,6 @@ package com.atrium.launcher
 
 import android.app.Activity
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -24,61 +23,79 @@ class LauncherActivity : Activity() {
             setDecorFitsSystemWindows(false)
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
             setBackgroundDrawable(ColorDrawable(Color.BLACK))
+            if (Build.VERSION.SDK_INT >= 29) {
+                isNavigationBarContrastEnforced = false
+                isStatusBarContrastEnforced = false
+            }
         }
 
         settings = LauncherSettings(this)
-        registry = SettingsRegistry(this, settings)
         index = AppIndex(this)
+        registry = SettingsRegistry(this, settings, index)
 
-        val engine = SearchEngine(listOf(
-            AppSearch(index),
-            ContactsSearch(this),
-            WebSearch { q, _ ->
-                root.blurOut()
-                try { startActivity(webIntent(q)) } catch (_: Exception) { root.playIntro() }
-            }
-        ))
+        val engine = SearchEngine(
+            listOf(
+                AppSearch(index),
+                ContactsSearch(this, settings),
+                WebSearch(settings) { q, _ ->
+                    root.blurOut()
+                    try {
+                        startActivity(webIntent(q, settings.webEngine))
+                    } catch (_: Exception) {
+                        root.playIntro()
+                    }
+                },
+            )
+        )
 
         root = HomeRoot(this, engine, index, settings, registry)
         root.prepareIntro()
         setContentView(root)
 
-        settings.applyInitial()
+        registry.onApply = { root.refresh() }
+        registry.onStructure = { root.refreshSettings() }
+        index.onChanged = {
+            root.refresh()
+            root.refreshSettings()
+        }
+        index.onLaunch = { root.blurOut() }
+        index.onLaunchFailed = { root.playIntro() }
+        index.onPinsChanged = {
+            root.refresh()
+            root.refreshSettings()
+        }
 
+        // Always white-on-black system chrome, in every appearance.
         window.insetsController?.setSystemBarsAppearance(
             0,
             WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
                 WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
         )
-
-        index.onChanged = { root.refresh() }
-        index.onLaunch = { root.blurOut() }
-        index.onLaunchFailed = { root.playIntro() }
+        settings.applyInitial()
         index.reload()
 
         if (Build.VERSION.SDK_INT >= 33) {
-            onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) {
-                root.onBack()
-            }
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT
+            ) { root.onBack() }
         }
     }
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
-        grantResults: IntArray
+        grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 101 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if (requestCode == SettingsRegistry.REQUEST_CONTACTS) {
             root.refresh()
+            root.refreshSettings()
         }
     }
 
     @Deprecated("Pre-33 back handling")
     override fun onBackPressed() {
-        if (!root.onBack()) {
-            super.onBackPressed()
-        }
+        if (!root.onBack()) super.onBackPressed()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -88,6 +105,8 @@ class LauncherActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        settings.applyBars()
+        Haptics.enabled = settings.hapticsEnabled
         root.playIntro()
     }
 
