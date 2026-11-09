@@ -49,8 +49,7 @@ class SettingsRegistry(
     private val activity: Activity,
     private val settings: LauncherSettings
 ) {
-    val rootTree: List<SettingNode> by lazy {
-        listOf(
+    val rootTree: List<SettingNode> get() = listOf(
             SettingNode.Category(
                 id = "display",
                 title = "Display",
@@ -74,6 +73,40 @@ class SettingsRegistry(
                     )
                 )
             ),
+            run {
+                val installedEngines = settings.getInstalledFallbackEngines()
+                val engineNodes = ArrayList<SettingNode>()
+                for (engine in installedEngines) {
+                    engineNodes.add(
+                        SettingNode.Toggle(
+                            id = "fallback_${engine.id}",
+                            title = engine.name,
+                            description = "Enable ${engine.name} in fallback search",
+                            tags = listOf("search", engine.name.lowercase(), "fallback", "provider"),
+                            get = { settings.isEngineEnabled(engine.id) },
+                            set = { settings.setEngineEnabled(engine.id, it) }
+                        )
+                    )
+                    if (installedEngines.size > 1) {
+                        engineNodes.add(
+                            SettingNode.Action(
+                                id = "move_up_${engine.id}",
+                                title = "↑ Move ${engine.name} Up",
+                                description = "Prioritize ${engine.name} higher in fallback search",
+                                tags = listOf("reorder", "priority", engine.name.lowercase()),
+                                action = { settings.moveEngine(engine.id, up = true) }
+                            )
+                        )
+                    }
+                }
+                SettingNode.Category(
+                    id = "search_shortcuts",
+                    title = "Search Providers",
+                    description = "Configure and reorder external fallback search apps",
+                    tags = listOf("search", "google", "youtube", "spotify", "maps", "web"),
+                    children = engineNodes
+                )
+            },
             SettingNode.Category(
                 id = "animations",
                 title = "Animations",
@@ -140,7 +173,6 @@ class SettingsRegistry(
                 )
             )
         )
-    }
 
     /**
      * Search across settings using FZF matching against title, description, and tags.

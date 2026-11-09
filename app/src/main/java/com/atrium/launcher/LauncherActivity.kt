@@ -13,13 +13,15 @@ import android.view.WindowManager
 import android.window.OnBackInvokedDispatcher
 
 class LauncherActivity : Activity() {
-    private lateinit var index: AppIndex
-    private lateinit var settings: LauncherSettings
-    private lateinit var registry: SettingsRegistry
-    private lateinit var root: HomeRoot
+    lateinit var index: AppIndex; private set
+    lateinit var settings: LauncherSettings; private set
+    lateinit var registry: SettingsRegistry; private set
+    lateinit var engine: SearchEngine; private set
+    lateinit var root: HomeRoot; private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        instance = this
         window.apply {
             setDecorFitsSystemWindows(false)
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
@@ -30,12 +32,12 @@ class LauncherActivity : Activity() {
         registry = SettingsRegistry(this, settings)
         index = AppIndex(this)
 
-        val engine = SearchEngine(listOf(
+        engine = SearchEngine(listOf(
             AppSearch(index),
             ContactsSearch(this),
-            WebSearch { q, _ ->
+            FallbackSearchProvider(settings) { intent, _ ->
                 root.blurOut()
-                try { startActivity(webIntent(q)) } catch (_: Exception) { root.playIntro() }
+                try { startActivity(intent) } catch (_: Exception) { root.playIntro() }
             }
         ))
 
@@ -99,10 +101,16 @@ class LauncherActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (instance == this) instance = null
         index.destroy()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+    }
+
+    companion object {
+        var instance: LauncherActivity? = null
+            private set
     }
 }

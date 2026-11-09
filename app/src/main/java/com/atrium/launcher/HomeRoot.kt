@@ -33,23 +33,21 @@ import kotlin.math.min
 
 /**
  * Atrium HomeRoot
- * Clean, minimal launcher architecture.
+ * Minimalist, high-performance launcher architecture.
  *
- * Columns layout:
- * [settings] <---> [apps] <---> [contacts] <---> [web]
+ * Search columns layout:
+ * [apps] <---> [contacts] <---> [search]
  *
- * Indexing:
- * Settings: index = -1 (left of apps; dedicated browse/search column, excluded from global priority query)
- * Apps:     index = 0  (primary apps column, displays full app list bottom-to-top when search is empty)
- * Other:    index = 1, 2, ... (priority-ranked search columns: Contacts, Web, etc.)
+ * Settings are opened by long-pressing empty home screen space.
+ * Pinned favorites are editable via long-press on any app.
  */
 @SuppressLint("ClickableViewAccessibility")
 class HomeRoot(
     ctx: Context,
     private val engine: SearchEngine,
-    private val index: AppIndex,
-    private val settings: LauncherSettings,
-    private val registry: SettingsRegistry
+    val index: AppIndex,
+    val settings: LauncherSettings,
+    val registry: SettingsRegistry
 ) : FrameLayout(ctx) {
 
     private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
@@ -62,48 +60,29 @@ class HomeRoot(
 
     private val search = VLayer(ctx)
     private val colsBox = Layer(ctx)
-    private val input = EditText(ctx)
+    val input = EditText(ctx)
 
-    // Settings Column (Left of apps)
-    private inner class SettingsCol {
-        val view = FrameLayout(context).apply { visibility = GONE }
-        val settingsView = SettingsColumnView(context, registry)
-        val pos = Spring({ applySettingsCol() }, {}, 300f, 0.6f)
-        val pres = Spring({ applySettingsCol() }, { v -> if (v <= 0f) view.visibility = GONE }, 420f, 1f)
-
-        init {
-            val title = TextView(context).apply {
-                text = "SETTINGS"
-                setTextColor(0x55FFFFFF)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                setPadding(0, 0, 0, dp(10f).toInt())
-                gravity = Gravity.CENTER
-            }
-            val wrap = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                addView(title, LinearLayout.LayoutParams(-1, -2))
-                addView(settingsView, LinearLayout.LayoutParams(-1, 0, 1f))
-            }
-            view.addView(wrap, FrameLayout.LayoutParams(-1, -1, Gravity.BOTTOM))
-            colsBox.addView(view, FrameLayout.LayoutParams(colW, -1, Gravity.CENTER_HORIZONTAL))
-        }
-
-        fun updateQuery(q: String) {
-            settingsView.setQuery(q)
-        }
+    val settingsView = SettingsColumnView(ctx, registry).apply {
+        visibility = GONE
+        onBack = { closeSettings() }
     }
 
-    // Dynamic Search Result Columns (Apps, Contacts, Web)
+    var isSettingsOpen = false
+        private set
+
+    private var currentPopup: AppContextPopup? = null
+
+    // Search Result Columns (Apps, Contacts, Search)
     private inner class Col(val id: String, val titleName: String) {
         val view = FrameLayout(context).apply { visibility = GONE }
         val scrollView = ScrollView(context).apply {
             isVerticalScrollBarEnabled = false
             overScrollMode = OVER_SCROLL_IF_CONTENT_SCROLLS
+            isFillViewport = true
         }
         val itemsLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         }
 
         var live = false
@@ -112,20 +91,21 @@ class HomeRoot(
         val pres = Spring({ applyCol(this) }, { v -> if (v <= 0f) view.visibility = GONE }, 420f, 1f)
 
         init {
-            scrollView.addView(itemsLayout, FrameLayout.LayoutParams(-1, -2))
+            scrollView.addView(itemsLayout, FrameLayout.LayoutParams(-1, -1, Gravity.BOTTOM))
 
+            // Indicator right above the search bar
             val header = TextView(context).apply {
                 text = titleName.uppercase()
                 setTextColor(0x55FFFFFF)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                setPadding(0, 0, 0, dp(6f).toInt())
+                setPadding(0, dp(4f).toInt(), 0, dp(6f).toInt())
                 gravity = Gravity.CENTER
             }
             val wrap = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                addView(header, LinearLayout.LayoutParams(-1, -2))
                 addView(scrollView, LinearLayout.LayoutParams(-1, 0, 1f))
+                addView(header, LinearLayout.LayoutParams(-1, -2))
             }
             view.addView(wrap, FrameLayout.LayoutParams(-1, -1, Gravity.BOTTOM))
         }
@@ -135,8 +115,7 @@ class HomeRoot(
             itemsLayout.removeAllViews()
 
             // Invert the layout order so highest-priority result (index 0)
-            // is placed at the bottom of itemsLayout (right above the searchbar),
-            // and lower-priority results extend upwards.
+            // is placed at the bottom right above the indicator and searchbar
             for (j in res.indices.reversed()) {
                 val x = res[j]
                 val l = Label(context).apply {
@@ -144,36 +123,31 @@ class HomeRoot(
                     gravity = Gravity.CENTER
                     text = if (x.subtitle != null) "${x.title} · ${x.subtitle}" else x.title
                     setOnClickListener { x.run(this) }
+                    if (x.appEntry != null) {
+                        setOnLongClickListener {
+                            showAppContext(x.appEntry, isFavorite = index.isPinned(x.appEntry))
+                            true
+                        }
+                    }
                 }
                 itemsLayout.addView(l, LinearLayout.LayoutParams(-1, -2))
             }
-
-            itemsLayout.post {
-                val contentH = itemsLayout.height
-                val scrollH = scrollView.height
-                if (contentH < scrollH) {
-                    itemsLayout.translationY = (scrollH - contentH).toFloat()
-                    scrollView.scrollTo(0, 0)
-                } else {
-                    itemsLayout.translationY = 0f
-                    scrollView.scrollTo(0, contentH - scrollH)
-                }
-            }
+            scrollView.post { scrollView.scrollTo(0, itemsLayout.height) }
         }
     }
 
-    private val settingsCol by lazy { SettingsCol() }
     private val cols = LinkedHashMap<String, Col>()
-    private var liveOrder: List<String> = emptyList() // IDs of active right-side columns: "apps", "contacts", "web"
-    private var focusId: String? = null // null means settings (-1), otherwise "apps", "contacts", etc.
-    private var isSettingsFocused = false
+    private var liveOrder: List<String> = emptyList()
+    private var focusId: String? = null
     private var pinned: String? = null
     private var scrollOff = 0f
     private var colW = 0
     private val step get() = width.toFloat()
 
     private val spring = Spring(::setProgress, ::settled)
-    private var open = false
+    var open = false
+        private set
+
     private var topInset = 0
     private var bottomInset = 0
     private var imeShift = 0f
@@ -195,6 +169,18 @@ class HomeRoot(
         home.addView(pins, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(120f).toInt() })
         stage.addView(home, LayoutParams(-1, -1))
         addView(stage, LayoutParams(-1, -1))
+
+        // Long press empty home space to open Settings
+        home.isLongClickable = true
+        home.setOnLongClickListener {
+            openSettings()
+            true
+        }
+        stage.isLongClickable = true
+        stage.setOnLongClickListener {
+            openSettings()
+            true
+        }
 
         input.apply {
             background = null
@@ -218,19 +204,14 @@ class HomeRoot(
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun afterTextChanged(s: Editable?) {
-                    if (!isSettingsFocused) pinned = null
+                    pinned = null
                     refreshResults()
                 }
             })
             setOnEditorActionListener { _, action, _ ->
                 if (action == EditorInfo.IME_ACTION_SEARCH) {
-                    if (isSettingsFocused) {
-                        // In settings, enter does nothing destructive
-                        true
-                    } else {
-                        val c = focusId?.let { cols[it] }
-                        c?.first?.run?.invoke(null); true
-                    }
+                    val c = focusId?.let { cols[it] }
+                    c?.first?.run?.invoke(null); true
                 } else false
             }
         }
@@ -239,6 +220,9 @@ class HomeRoot(
         search.addView(input, LinearLayout.LayoutParams(-2, -2).apply { gravity = Gravity.CENTER_HORIZONTAL })
         search.visibility = GONE
         addView(search, LayoutParams(-1, -1))
+
+        // Standalone Settings View Overlay
+        addView(settingsView, LayoutParams(-1, -1))
 
         setOnApplyWindowInsetsListener { _, ins ->
             val bars = ins.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
@@ -264,8 +248,6 @@ class HomeRoot(
         setProgress(0f)
     }
 
-    // ---------- Layout ----------
-
     private fun setImeFrom(i: WindowInsets) {
         val ime = i.getInsets(WindowInsets.Type.ime()).bottom
         imeShift = -max(0, ime - bottomInset).toFloat()
@@ -277,16 +259,15 @@ class HomeRoot(
         val side = dp(20f).toInt()
         home.setPadding(side + dp(2f).toInt(), topInset + (h * 0.2f).toInt(), side, bottomInset)
         search.setPadding(0, topInset + dp(10f).toInt(), 0, bottomInset + dp(14f).toInt())
+        settingsView.setPadding(0, topInset, 0, bottomInset)
 
         val nw = (width * 0.85f).toInt()
         if (nw != colW) {
             colW = nw
-            settingsCol.view.layoutParams = FrameLayout.LayoutParams(colW, -1, Gravity.CENTER_HORIZONTAL)
             for (c in cols.values) {
                 c.view.layoutParams = FrameLayout.LayoutParams(colW, -1, Gravity.CENTER_HORIZONTAL)
                 applyCol(c)
             }
-            applySettingsCol()
         }
     }
 
@@ -295,15 +276,56 @@ class HomeRoot(
         metrics()
     }
 
+    // ---------- Favorites & Context Menu ----------
+
+    fun showAppContext(app: AppEntry, isFavorite: Boolean) {
+        currentPopup?.dismiss()
+        val popup = AppContextPopup(
+            context = context,
+            app = app,
+            isFavorite = isFavorite,
+            onAppInfo = { settings.openAppSettings(it.component.packageName) },
+            onToggleFavorite = {
+                if (isFavorite) index.removePin(it) else index.addPin(it)
+                refreshPins()
+            },
+            onDismiss = {
+                removeView(currentPopup)
+                currentPopup = null
+            }
+        )
+        currentPopup = popup
+        addView(popup, LayoutParams(-1, -1))
+    }
+
+    // ---------- Settings Controls ----------
+
+    fun openSettings() {
+        if (isSettingsOpen) return
+        isSettingsOpen = true
+        settingsView.rebuild()
+        settingsView.visibility = VISIBLE
+        settingsView.alpha = 0f
+        settingsView.translationY = dp(40f)
+        settingsView.animate().alpha(1f).translationY(0f).setDuration(220).setInterpolator(ExpoOut).start()
+    }
+
+    fun closeSettings() {
+        if (!isSettingsOpen) return
+        isSettingsOpen = false
+        settingsView.animate().alpha(0f).translationY(dp(40f)).setDuration(160).setInterpolator(ExpoOut)
+            .withEndAction { settingsView.visibility = GONE }.start()
+    }
+
     // ---------- Data ----------
 
     fun refresh() {
         refreshPins()
         refreshResults()
-        settingsCol.settingsView.rebuild()
+        settingsView.rebuild()
     }
 
-    private fun refreshPins() {
+    fun refreshPins() {
         val p = index.pinned()
         val sig = p.joinToString { it.component.flattenToString() }
         if (sig == pinSig) return
@@ -314,36 +336,24 @@ class HomeRoot(
             styleLabel(t, 28f)
             t.text = e.label
             t.setOnClickListener { index.launch(e, t) }
+            t.setOnLongClickListener {
+                showAppContext(e, isFavorite = true)
+                true
+            }
             pins.addView(t, LinearLayout.LayoutParams(-2, -2))
         }
     }
 
-    private fun refreshResults() {
+    fun refreshResults() {
         val query = input.text.toString()
-        settingsCol.updateQuery(query)
-
         val columns = engine.query(query, 50)
         liveOrder = columns.map { it.id }
 
-        if (pinned != null && pinned !in liveOrder && !isSettingsFocused) {
+        if (pinned != null && pinned !in liveOrder) {
             pinned = null
         }
-
-        if (!isSettingsFocused) {
-            focusId = pinned ?: liveOrder.firstOrNull()
-        }
-
-        val focusIndex = if (isSettingsFocused) -1 else max(0, liveOrder.indexOf(focusId))
-
-        // Position settings column at slot -1 relative to apps (slot 0)
-        val targetSettingsSlot = (-1 - focusIndex).toFloat()
-        if (settingsCol.pres.value < 0.05f) {
-            settingsCol.pos.snap(targetSettingsSlot)
-            settingsCol.view.visibility = VISIBLE
-            settingsCol.pres.animateTo(1f)
-        } else {
-            settingsCol.pos.animateTo(targetSettingsSlot)
-        }
+        focusId = pinned ?: liveOrder.firstOrNull()
+        val focusIndex = max(0, liveOrder.indexOf(focusId))
 
         for (c in cols.values) {
             if (c.id !in liveOrder && c.live) {
@@ -373,8 +383,7 @@ class HomeRoot(
     }
 
     private fun retarget(velocity: Float = 0f) {
-        val focusIndex = if (isSettingsFocused) -1 else max(0, liveOrder.indexOf(focusId))
-        settingsCol.pos.animateTo((-1 - focusIndex).toFloat(), velocity)
+        val focusIndex = max(0, liveOrder.indexOf(focusId))
         for ((i, id) in liveOrder.withIndex()) {
             cols[id]?.pos?.animateTo((i - focusIndex).toFloat(), velocity)
         }
@@ -392,19 +401,7 @@ class HomeRoot(
         v.visibility = if (v.alpha <= 0.01f || !c.live) GONE else VISIBLE
     }
 
-    private fun applySettingsCol() {
-        val p = settingsCol.pos.value + scrollOff
-        val a = min(abs(p), 1f)
-        val v = settingsCol.view
-        v.translationX = p * step
-        val fade = (1f - a * 2f).coerceIn(0f, 1f)
-        v.alpha = settingsCol.pres.value.coerceIn(0f, 1f) * fade
-        val s = 1f - 0.1f * a
-        v.scaleX = s; v.scaleY = s
-        v.visibility = if (v.alpha <= 0.01f) GONE else VISIBLE
-    }
-
-    // ---------- Search progress ----------
+    // ---------- Search Progress ----------
 
     private fun setProgress(p: Float) {
         val pc = p.coerceIn(0f, 1f)
@@ -431,10 +428,6 @@ class HomeRoot(
         scrollOff = 0f
         liveOrder = emptyList()
         focusId = null
-        isSettingsFocused = false
-        settingsCol.pres.snap(0f)
-        settingsCol.pos.snap(-1f)
-        settingsCol.view.visibility = GONE
         for (c in cols.values) {
             c.live = false
             c.pres.snap(0f)
@@ -448,25 +441,11 @@ class HomeRoot(
         input.isFocusableInTouchMode = f
     }
 
-    private fun prepareSearch() {
-        search.visibility = VISIBLE
-        setInputFocusable(true)
-        refreshResults()
-    }
-
-    private fun showIme() {
-        input.requestFocus()
-        windowInsetsController?.show(WindowInsets.Type.ime())
-    }
-
-    private fun hideIme() {
-        windowInsetsController?.hide(WindowInsets.Type.ime())
-        input.clearFocus()
-    }
-
     fun openSearch(v: Float = 0f) {
         open = true
         prepareSearch()
+        setInputFocusable(true)
+        input.requestFocus()
         showIme()
         spring.animateTo(1f, v)
     }
@@ -478,6 +457,14 @@ class HomeRoot(
     }
 
     fun onBack(): Boolean {
+        if (currentPopup != null) {
+            currentPopup?.dismiss()
+            return true
+        }
+        if (isSettingsOpen) {
+            closeSettings()
+            return true
+        }
         if (open) {
             closeSearch()
             return true
@@ -493,7 +480,7 @@ class HomeRoot(
         closeCleanup()
     }
 
-    // ---------- Blur <-> focus ----------
+    // ---------- Blur <-> Focus ----------
 
     private var fv = 0f
     private var focusAnim: ValueAnimator? = null
@@ -523,37 +510,44 @@ class HomeRoot(
         }
     }
 
-    fun prepareIntro() {
-        focusAnim?.cancel()
-        setFocus(0f)
+    fun prepareIntro() = setFocus(0f)
+    fun playIntro() = animateFocus(1f, 320, ExpoOut)
+    fun blurOut() = animateFocus(0f, 160, AccelerateInterpolator())
+
+    private fun showIme() {
+        val imm = context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+        imm?.showSoftInput(input, 0)
     }
 
-    fun playIntro() {
-        animateFocus(1f, 520, ExpoOut)
+    private fun hideIme() {
+        val imm = context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+        imm?.hideSoftInputFromWindow(windowToken, 0)
     }
 
-    fun blurOut() {
-        animateFocus(0f, 320, AccelerateInterpolator(1.4f))
-        postDelayed({ if (hasWindowFocus() && fv < 1f) playIntro() }, 1400)
+    private fun prepareSearch() {
+        search.visibility = VISIBLE
+        refreshResults()
     }
 
-    // ---------- Touch & Scroll Gesture ----------
+    // ---------- Touch & Gestures ----------
 
+    private var mode = 0
     private var downX = 0f
     private var downY = 0f
-    private var mode = 0 // 1 = vertical search drag, 2 = horizontal column scroll
     private var startY = 0f
-    private var baseP = 0f
     private var startX = 0f
+    private var baseP = 0f
+    private val range get() = dp(180f)
     private var vt: VelocityTracker? = null
-    private val range get() = min(height * 0.3f, dp(260f))
 
     override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
+        if (currentPopup != null || isSettingsOpen) return super.onInterceptTouchEvent(e)
         track(e, false)
         return mode != 0
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (currentPopup != null || isSettingsOpen) return super.onTouchEvent(e)
         track(e, true)
         return true
     }
@@ -598,31 +592,27 @@ class HomeRoot(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 vt?.addMovement(e)
                 vt?.computeCurrentVelocity(1000)
-                if (mode == 1) {
-                    val v = (vt?.yVelocity ?: 0f) / range
-                    val goOpen = when {
-                        v > 1.5f -> true
-                        v < -1.5f -> false
-                        else -> spring.value > 0.5f
-                    }
-                    if (goOpen) {
-                        open = true
-                        showIme()
-                        spring.animateTo(1f, v)
-                    } else {
-                        open = false
-                        hideIme()
-                        spring.animateTo(0f, v)
-                    }
-                } else if (mode == 2) {
-                    endScroll((vt?.xVelocity ?: 0f) / step)
-                } else if (own && e.actionMasked == MotionEvent.ACTION_UP && open &&
-                    abs(e.y - downY) < slop && abs(e.x - downX) < slop) {
-                    closeSearch()
-                }
-                mode = 0
+                val vy = vt?.yVelocity ?: 0f
+                val vx = vt?.xVelocity ?: 0f
                 vt?.recycle()
                 vt = null
+
+                if (mode == 1) {
+                    mode = 0
+                    val vNorm = vy / range
+                    val cur = spring.value
+                    val target = when {
+                        cur > 0.85f -> 1f
+                        cur < 0.15f -> 0f
+                        vNorm > 0.4f -> 1f
+                        vNorm < -0.4f -> 0f
+                        else -> if (cur >= 0.5f) 1f else 0f
+                    }
+                    if (target == 1f) openSearch(vNorm) else closeSearch(vNorm)
+                } else if (mode == 2) {
+                    mode = 0
+                    endScroll(vx / step)
+                }
             }
         }
     }
@@ -637,68 +627,43 @@ class HomeRoot(
     }
 
     private fun setScroll(raw: Float) {
-        val focusIndex = if (isSettingsFocused) -1 else max(0, liveOrder.indexOf(focusId))
-        // Allow scrolling between settings (-1) and the rightmost live column
-        val minSlot = -1 - focusIndex // settings relative pos
-        val maxSlot = (liveOrder.size - 1 - focusIndex) // rightmost relative pos
+        if (liveOrder.isEmpty()) return
+        val focusIndex = max(0, liveOrder.indexOf(focusId))
+        val minSlot = -focusIndex
+        val maxSlot = (liveOrder.size - 1 - focusIndex)
 
-        val hi = -minSlot.toFloat() // swiping right brings left column
-        val lo = -maxSlot.toFloat() // swiping left brings right column
+        val hi = -minSlot.toFloat()
+        val lo = -maxSlot.toFloat()
 
         scrollOff = when {
             raw > hi -> hi + (raw - hi) * 0.25f
             raw < lo -> lo + (raw - lo) * 0.25f
             else -> raw
         }
-        applySettingsCol()
         for (c in cols.values) applyCol(c)
     }
 
     private fun endScroll(vSlots: Float) {
+        if (liveOrder.isEmpty()) return
         val proj = scrollOff + vSlots * 0.12f
 
-        // Candidate slots: settings is at pos -1, live columns at 0, 1, 2...
-        var bestId: String? = null
-        var bestIsSettings = false
+        var bestId: String = liveOrder[0]
         var bestDist = Float.MAX_VALUE
 
-        // Check settings dist
-        val settingsDist = abs(settingsCol.pos.value + proj)
-        if (settingsDist < bestDist) {
-            bestDist = settingsDist
-            bestIsSettings = true
-        }
-
-        // Check each live column dist
         for (id in liveOrder) {
             val d = abs(cols[id]!!.pos.value + proj)
             if (d < bestDist) {
                 bestDist = d
-                bestIsSettings = false
                 bestId = id
             }
         }
 
         val off = scrollOff
         scrollOff = 0f
-
-        settingsCol.pos.set(settingsCol.pos.value + off)
         for (c in cols.values) c.pos.set(c.pos.value + off)
 
-        if (bestIsSettings) {
-            isSettingsFocused = true
-            pinned = null
-            focusId = null
-        } else {
-            isSettingsFocused = false
-            pinned = bestId
-            focusId = bestId
-        }
-
+        pinned = bestId
+        focusId = bestId
         retarget(vSlots.coerceIn(-8f, 8f))
-    }
-
-    companion object {
-        const val MAX_VISIBLE_ROWS = 12
     }
 }

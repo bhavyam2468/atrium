@@ -65,13 +65,43 @@ class AppIndex(private val activity: Activity) {
     fun pinned(): List<AppEntry> {
         val all = apps
         if (all.isEmpty()) return emptyList()
-        val saved = prefs.getString(PINS, null)
-        val comps: List<String> = if (saved != null) saved.split('\n').filter { it.isNotEmpty() } else {
-            val d = DEFAULTS.mapNotNull { n -> all.firstOrNull { it.key == n }?.component?.flattenToString() }
-            prefs.edit().putString(PINS, d.joinToString("\n")).apply()
-            d
-        }
+        val comps = pinnedComponents()
         return comps.mapNotNull { f -> all.firstOrNull { it.component.flattenToString() == f } }
+    }
+
+    fun isPinned(e: AppEntry): Boolean {
+        val flat = e.component.flattenToString()
+        return pinnedComponents().contains(flat)
+    }
+
+    fun addPin(e: AppEntry) {
+        val current = pinnedComponents().toMutableList()
+        val flat = e.component.flattenToString()
+        if (flat !in current) {
+            current.add(flat)
+            savePins(current)
+            main.post { onChanged?.invoke() }
+        }
+    }
+
+    fun removePin(e: AppEntry) {
+        val current = pinnedComponents().toMutableList()
+        val flat = e.component.flattenToString()
+        if (current.remove(flat)) {
+            savePins(current)
+            main.post { onChanged?.invoke() }
+        }
+    }
+
+    private fun pinnedComponents(): List<String> {
+        val saved = prefs.getString(PINS, null) ?: return DEFAULTS.mapNotNull { n ->
+            apps.firstOrNull { it.key == n }?.component?.flattenToString()
+        }
+        return saved.split('\n').filter { it.isNotEmpty() }
+    }
+
+    private fun savePins(list: List<String>) {
+        prefs.edit().putString(PINS, list.joinToString("\n")).apply()
     }
 
     fun launch(e: AppEntry, from: View?) {

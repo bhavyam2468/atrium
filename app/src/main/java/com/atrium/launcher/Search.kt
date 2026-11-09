@@ -12,6 +12,7 @@ class Result(
     val title: String,
     val subtitle: String? = null,
     val score: Int = 0,
+    val appEntry: AppEntry? = null,
     val run: (View?) -> Unit
 )
 
@@ -34,13 +35,11 @@ class AppSearch(private val index: AppIndex) : SearchProvider {
         if (allApps.isEmpty()) return emptyList()
 
         if (trimmed.isEmpty()) {
-            // When query is empty, return all installed apps sorted alphabetically
             return allApps.map { a ->
-                Result(a.label, score = 0) { v -> index.launch(a, v) }
+                Result(a.label, score = 0, appEntry = a) { v -> index.launch(a, v) }
             }
         }
 
-        // Fuzzy search using FZF
         val scored = ArrayList<Pair<Int, AppEntry>>()
         for (a in allApps) {
             val score = Fzf.score(trimmed, a.label) ?: Fzf.score(trimmed, a.key)
@@ -48,10 +47,9 @@ class AppSearch(private val index: AppIndex) : SearchProvider {
                 scored += score to a
             }
         }
-        // Highest score first, then alphabetically
         scored.sortWith(compareByDescending<Pair<Int, AppEntry>> { it.first }.thenBy { it.second.key })
         return scored.take(limit).map { (score, a) ->
-            Result(a.label, score = score) { v -> index.launch(a, v) }
+            Result(a.label, score = score, appEntry = a) { v -> index.launch(a, v) }
         }
     }
 }
@@ -63,7 +61,6 @@ class ContactsSearch(private val context: Context) : SearchProvider {
     override fun query(q: String, limit: Int): List<Result> {
         val trimmed = q.trim()
 
-        // Check permission without crashing
         if (context.checkSelfPermission(android.Manifest.permission.READ_CONTACTS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED) {
             return emptyList()
@@ -73,8 +70,7 @@ class ContactsSearch(private val context: Context) : SearchProvider {
         val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-            ContactsContract.CommonDataKinds.Phone.NUMBER,
-            ContactsContract.CommonDataKinds.Phone.CONTACT_ID
+            ContactsContract.CommonDataKinds.Phone.NUMBER
         )
 
         try {
@@ -130,26 +126,34 @@ class ContactsSearch(private val context: Context) : SearchProvider {
     }
 }
 
-class WebSearch(private val go: (String, View?) -> Unit) : SearchProvider {
+class FallbackSearchProvider(
+    private val settings: LauncherSettings,
+    private val onSearch: (Intent, View?) -> Unit
+) : SearchProvider {
     override val id = "web"
-    override val title = "Web"
+    override val title = "Search"
 
     override fun query(q: String, limit: Int): List<Result> {
         val t = q.trim()
+        val engines = settings.getActiveFallbackEngines()
+        if (engines.isEmpty()) return emptyList()
+
         if (t.isEmpty()) {
-            return listOf(Result("Search the web", score = 0) { go("", it) })
+            val web = engines.firstOrNull { it.id == "web" } ?: engines.first()
+            return listOf(Result("Search the web", score = 0) { onSearch(web.intentBuilder(""), it) })
         }
-        return listOf(Result("Search “$t” on web", score = 1) { go(t, it) })
+
+        val results = ArrayList<Result>(engines.size)
+        for (e in engines) {
+            results += Result("Search “$t” on ${e.name}", score = 1) {
+                onSearch(e.intentBuilder(t), it)
+            }
+        }
+        return results
     }
 }
 
 class SearchEngine(private val providers: List<SearchProvider>) {
-    /**
-     * Best fuzzy match wins center column across categories.
-     * If tied scores or same name: Contacts > Apps > Web.
-     * If no matches in apps or contacts: Web wins center column.
-     * If query is empty: Default order [apps, contacts, web].
-     */
     fun query(q: String, limit: Int): List<Column> {
         val trimmed = q.trim()
         if (trimmed.isEmpty()) {
@@ -166,7 +170,6 @@ class SearchEngine(private val providers: List<SearchProvider>) {
             val r = p.query(trimmed, limit)
             if (r.isNotEmpty()) {
                 val maxScore = r.maxOf { it.score }
-                // Category priority tie-breaker: contacts (2) > apps (1) > web (0)
                 val tiePriority = when (p.id) {
                     "contacts" -> 2
                     "apps" -> 1
@@ -176,7 +179,6 @@ class SearchEngine(private val providers: List<SearchProvider>) {
             }
         }
 
-        // Sort descending by highest match score, then tiePriority
         scored.sortWith(
             compareByDescending<Triple<Column, Int, Int>> { it.second }
                 .thenByDescending { it.third }
@@ -185,7 +187,4 @@ class SearchEngine(private val providers: List<SearchProvider>) {
         return scored.map { it.first }
     }
 }
-
-fun webIntent(q: String) =
-    Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(q)))
 

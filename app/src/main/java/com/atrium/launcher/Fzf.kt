@@ -1,137 +1,105 @@
 package com.atrium.launcher
 
-import kotlin.math.max
+import kotlin.math.abs
 
 /**
- * High-performance port of the fzf v2 fuzzy matching algorithm.
- * Zero-allocation during matching passes for low latency and zero GC stutter.
+ * Atrium Fuzzy Matcher
+ * Supports exact substring / prefix matching and strict 1-degree error tolerance
+ * (Levenshtein distance = 1 for typos: 1 insertion, 1 deletion, or 1 substitution).
+ * Rejects matches with >= 2 errors.
  */
 object Fzf {
-    private const val SCORE_MATCH = 16
-    private const val SCORE_GAP_START = -3
-    private const val SCORE_GAP_EXTENSION = -1
-    private const val BONUS_BOUNDARY = SCORE_MATCH / 2
-    private const val BONUS_NON_WORD = SCORE_MATCH / 2
-    private const val BONUS_CAMEL_123 = BONUS_BOUNDARY - 1
-    private const val BONUS_CONSECUTIVE = -(SCORE_GAP_START + SCORE_GAP_EXTENSION)
-    private const val BONUS_FIRST_CHAR_MULTIPLIER = 2
 
-    // Reusable buffers on the main thread for queries up to 128 chars and targets up to 1024 chars
-    private val h = IntArray(1024)
-    private val c = IntArray(1024)
-    private val bonus = IntArray(1024)
-
-    /**
-     * Scores how well [pattern] matches [target].
-     * Returns null if [pattern] is not a subsequence of [target].
-     * Higher score means a better match.
-     */
-    @Synchronized
     fun score(pattern: CharSequence, target: CharSequence): Int? {
         val pLen = pattern.length
         val tLen = target.length
-
         if (pLen == 0) return 0
-        if (pLen > tLen || pLen > 128 || tLen > 1024) return null
+        if (pLen > tLen + 1) return null
 
-        // 1. Quick forward check: verify pattern is a subsequence
-        var pIdx = 0
-        var tIdx = 0
-        while (pIdx < pLen && tIdx < tLen) {
-            val pChar = pattern[pIdx].lowercaseChar()
-            val tChar = target[tIdx].lowercaseChar()
-            if (pChar == tChar) pIdx++
-            tIdx++
-        }
-        if (pIdx < pLen) return null // Pattern characters not found in order
+        val p = pattern.toString().lowercase()
+        val t = target.toString().lowercase()
 
-        // 2. Pre-calculate bonus for each position in target
-        var prevClass = CharClass.NON_WORD
-        for (i in 0 until tLen) {
-            val ch = target[i]
-            val curClass = charClassOf(ch)
-            bonus[i] = when {
-                prevClass == CharClass.NON_WORD && curClass != CharClass.NON_WORD -> BONUS_BOUNDARY
-                prevClass == CharClass.LOWER && curClass == CharClass.UPPER -> BONUS_CAMEL_123
-                prevClass == CharClass.LETTER && curClass == CharClass.NUMBER -> BONUS_CAMEL_123
-                curClass == CharClass.NON_WORD -> BONUS_NON_WORD
-                else -> 0
-            }
-            prevClass = curClass
+        // 1. Exact substring check (0 errors)
+        val subIdx = t.indexOf(p)
+        if (subIdx >= 0) {
+            val prefixBonus = if (subIdx == 0) 40 else 0
+            val wordStartBonus = if (subIdx > 0 && isWordBoundary(t[subIdx - 1])) 25 else 0
+            return 120 + prefixBonus + wordStartBonus + (pLen * 10) - (subIdx * 3)
         }
 
-        // 3. Dynamic Programming Matrix (Smith-Waterman with affine gaps)
-        val p0 = pattern[0].lowercaseChar()
-        var maxScore = 0
+        // 2. Strict 1-degree error tolerance (distance == 1) against target or words in target
+        val words = extractWords(t)
+        var best1ErrorScore: Int? = null
 
-        for (j in 0 until tLen) {
-            val tj = target[j].lowercaseChar()
-            if (p0 == tj) {
-                var b = bonus[j]
-                if (j == 0) b *= BONUS_FIRST_CHAR_MULTIPLIER
-                h[j] = SCORE_MATCH + b
-                c[j] = h[j]
-                if (pLen == 1 && h[j] > maxScore) maxScore = h[j]
-            } else {
-                h[j] = if (j > 0) h[j - 1] + SCORE_GAP_EXTENSION else SCORE_GAP_START
-                c[j] = 0
-            }
-        }
-        if (pLen == 1) return maxScore
-
-        for (i in 1 until pLen) {
-            val pi = pattern[i].lowercaseChar()
-            var prevH = 0
-            var inGap = false
-
-            for (j in 0 until tLen) {
-                val tj = target[j].lowercaseChar()
-                val currentH = h[j]
-                var s = 0
-
-                if (pi == tj && j >= i) {
-                    val prevDiagH = if (j > 0) prevH else 0
-                    val prevDiagC = if (j > 0) c[j - 1] else 0
-
-                    var matchScore = SCORE_MATCH + bonus[j]
-                    if (prevDiagC > 0) {
-                        // Consecutive bonus
-                        matchScore = max(matchScore, prevDiagC + SCORE_MATCH + BONUS_CONSECUTIVE)
+        for ((wIdx, word) in words.withIndex()) {
+            val wLen = word.length
+            for (len in (pLen - 1)..(pLen + 1)) {
+                if (len <= 0 || len > wLen) continue
+                val candidate = word.substring(0, len)
+                if (isLevenshtein1(p, candidate)) {
+                    val score = 80 + (pLen * 8) - (wIdx * 6)
+                    if (best1ErrorScore == null || score > best1ErrorScore) {
+                        best1ErrorScore = score
                     }
-                    s = max(s, prevDiagH + SCORE_MATCH + bonus[j])
-                    s = max(s, matchScore)
-                    c[j] = s
-                } else {
-                    c[j] = 0
-                }
-
-                val leftH = if (j > 0) h[j - 1] else Int.MIN_VALUE / 2
-                val gapScore = if (inGap) leftH + SCORE_GAP_EXTENSION else leftH + SCORE_GAP_START
-                if (s < gapScore) {
-                    s = gapScore
-                    inGap = true
-                } else {
-                    inGap = false
-                }
-
-                prevH = currentH
-                h[j] = s
-                if (i == pLen - 1 && s > maxScore) {
-                    maxScore = s
                 }
             }
         }
 
-        return maxScore
+        return best1ErrorScore
     }
 
-    private enum class CharClass { LOWER, UPPER, LETTER, NUMBER, NON_WORD }
+    private fun isWordBoundary(c: Char): Boolean =
+        c == ' ' || c == '.' || c == '-' || c == '_' || c == '/' || c == '(' || c == '['
 
-    private fun charClassOf(c: Char): CharClass = when {
-        c in 'a'..'z' -> CharClass.LOWER
-        c in 'A'..'Z' -> CharClass.UPPER
-        c in '0'..'9' -> CharClass.NUMBER
-        c.isLetter() -> CharClass.LETTER
-        else -> CharClass.NON_WORD
+    private fun extractWords(text: String): List<String> {
+        val list = ArrayList<String>(4)
+        list.add(text) // full target first
+        val parts = text.split(' ', '-', '_', '.', '/')
+        for (part in parts) {
+            if (part.isNotEmpty() && part != text) {
+                list.add(part)
+            }
+        }
+        return list
+    }
+
+    /**
+     * Returns true if and only if the Levenshtein distance between s1 and s2 is exactly 1.
+     */
+    private fun isLevenshtein1(s1: String, s2: String): Boolean {
+        val l1 = s1.length
+        val l2 = s2.length
+        if (abs(l1 - l2) > 1) return false
+
+        if (l1 == l2) {
+            // Exactly 1 substitution
+            var diff = 0
+            for (i in 0 until l1) {
+                if (s1[i] != s2[i]) {
+                    diff++
+                    if (diff > 1) return false
+                }
+            }
+            return diff == 1
+        }
+
+        // 1 insertion or deletion
+        val longer = if (l1 > l2) s1 else s2
+        val shorter = if (l1 > l2) s2 else s1
+        var i = 0
+        var j = 0
+        var diff = 0
+
+        while (i < longer.length && j < shorter.length) {
+            if (longer[i] != shorter[j]) {
+                diff++
+                if (diff > 1) return false
+                i++
+            } else {
+                i++
+                j++
+            }
+        }
+        return true
     }
 }
